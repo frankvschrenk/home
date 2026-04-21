@@ -210,6 +210,35 @@
     .btn.ghost { background: transparent; color: var(--ink); border-color: var(--rule); }
     .btn.ghost:hover { border-color: var(--brand); color: var(--brand); text-decoration: none; }
 
+    /* --- Video -------------------------------------------------------
+       A single stage that holds both language variants. We only swap
+       the <source> and reload, rather than duplicating the <video>
+       element — that way the player size, poster and layout are
+       stable across language switches. */
+    .video-stage {
+      margin-top: 10px;
+    }
+    .video-stage .frame {
+      background: var(--bg-card);
+      border: 1px solid var(--rule);
+      border-radius: var(--radius);
+      padding: 14px;
+      box-shadow: var(--shadow);
+    }
+    .video-stage video {
+      display: block;
+      width: 100%;
+      height: auto;
+      border-radius: 6px;
+      background: #000;
+    }
+    .video-stage .caption {
+      margin-top: 14px;
+      font-size: 0.92rem;
+      color: var(--ink-faint);
+      text-align: center;
+    }
+
     /* --- Cards grid --------------------------------------------------- */
     .cards {
       display: grid;
@@ -452,6 +481,49 @@
       <a class="btn primary" href="https://docs.onisin.com" data-i18n-en>Read the docs</a>
       <a class="btn ghost"   href="#how"                    data-i18n-de>Wie es funktioniert</a>
       <a class="btn ghost"   href="#how"                    data-i18n-en>How it works</a>
+    </div>
+  </div>
+</section>
+
+<!-- =============================== VIDEO =============================== -->
+<section>
+  <div class="wrap">
+    <h2 data-i18n-de>onisin OS in zwei Minuten</h2>
+    <h2 data-i18n-en>onisin OS in two minutes</h2>
+
+    <p data-i18n-de>
+      Eine kurze Tour durch den Demo-Fall: Anmeldung über OIDC, eine
+      Chat-Anfrage an den KI-Assistenten, eine generierte
+      GraphQL-Abfrage und das dynamisch gerenderte Ergebnis-Board.
+    </p>
+    <p data-i18n-en>
+      A short tour through the demo case: OIDC sign-in, a chat
+      request to the AI assistant, a generated GraphQL query and the
+      dynamically rendered result board.
+    </p>
+
+    <div class="video-stage">
+      <div class="frame">
+        <video id="tour-video"
+               controls
+               preload="metadata"
+               playsinline
+               crossorigin="anonymous">
+          <source id="tour-video-src" src="oos_01_de.mp4" type="video/mp4">
+          <p data-i18n-de>
+            Ihr Browser unterstützt kein HTML5-Video.
+            <a href="oos_01_de.mp4">Video herunterladen</a>.
+          </p>
+          <p data-i18n-en>
+            Your browser does not support HTML5 video.
+            <a href="oos_01_en.mp4">Download the video</a>.
+          </p>
+        </video>
+      </div>
+      <div class="caption">
+        <span data-i18n-de>Sprache des Videos wechselt automatisch mit der Seitensprache.</span>
+        <span data-i18n-en>Video language follows the page language automatically.</span>
+      </div>
     </div>
   </div>
 </section>
@@ -937,6 +1009,37 @@
       de.classList.toggle('on', l === 'de');
       en.classList.toggle('on', l === 'en');
       localStorage.setItem('onisin-lang', l);
+      swapVideoSource(l);
+    }
+
+    // swapVideoSource switches the <source> of the tour video to the
+    // matching language file. It pauses the current playback first so
+    // the old audio track does not keep playing while the new source
+    // loads, and only restarts playback if the user was already
+    // watching.
+    function swapVideoSource(l) {
+      const video = document.getElementById('tour-video');
+      const src   = document.getElementById('tour-video-src');
+      if (!video || !src) return;
+
+      const next = l === 'en' ? 'oos_01_en.mp4' : 'oos_01_de.mp4';
+      const current = src.getAttribute('src');
+      if (current === next) return;
+
+      const wasPlaying = !video.paused && !video.ended;
+      const resumeAt   = video.currentTime;
+
+      video.pause();
+      src.setAttribute('src', next);
+      video.load();
+
+      if (wasPlaying) {
+        video.addEventListener('loadedmetadata', function once() {
+          video.removeEventListener('loadedmetadata', once);
+          try { video.currentTime = resumeAt; } catch (_) { /* ignore */ }
+          video.play().catch(() => { /* autoplay may be blocked */ });
+        });
+      }
     }
   })();
 </script>
