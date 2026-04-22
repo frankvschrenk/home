@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Event-basierte Daten — oder warum wir bei PostgreSQL geblieben
+sind — onisin OS Blog</title>
+  <meta name="description" content="Event Sourcing, CQRS, Change Data
+Capture, Kafka, EventStoreDB, ArangoDB, SurrealDB — jede Woche ein neuer
+Event-Store. Eine nüchterne Einordnung für Architekten und CTOs, warum
+PostgreSQL mit pgvector oft die bessere Wahl ist als die schicke
+spezialisierte DB.">
+  <link rel="stylesheet" href="../blog.css">
+</head>
+<body>
+
+<header class="site">
+  <div class="wrap">
+    <div class="brand">
+      <span class="dot"></span>
+      <a href="/">onisin OS</a>
+    </div>
+    <nav class="primary">
+      <a href="/#how">Wie es funktioniert</a>
+      <a href="/#security">Sicherheit</a>
+      <a href="/blog/" class="active">Blog</a>
+      <a href="https://docs.onisin.com">Docs</a>
+      <a class="gh-link" href="https://github.com/frankvschrenk/onisin"
+         target="_blank" rel="noopener" aria-label="onisin OS on GitHub">
+        <svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"
+             fill="currentColor" aria-hidden="true">
+          <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/>
+        </svg>
+        <span>GitHub</span>
+      </a>
+    </nav>
+  </div>
+</header>
+
+<div class="wrap">
+  <article class="post">
+    <header class="post-head">
+      <div class="post-meta">22. April 2026</div>
+      <h1>Event-basierte Daten — oder warum wir bei PostgreSQL geblieben
+sind</h1>
+    </header>
+
+<p><em>Event Sourcing</em>, <em>Event-Driven Architecture</em>,
+<em>CQRS</em>, <em>Change Data Capture</em>, <em>Event Streams</em>,
+<em>Kafka</em>, <em>EventStoreDB</em> — in Architektur-Meetings fallen
+diese Begriffe gerne als wären sie Synonyme. Sind sie nicht. Und die
+Frage, welche Datenbank man dafür nimmt, ist noch verworrener.</p>
+<p>Dieser Post ist für Architekten und CTOs, die gerade abwägen, ob die
+nächste Plattform eine spezialisierte Event-DB bekommt oder doch den
+langweiligen PostgreSQL-Cluster, der seit Jahren läuft. Ich nehme euch
+mit durch die Begriffe, die Optionen, und begründe ehrlich, warum wir
+bei OOS den unspektakulären Weg gewählt haben.</p>
+<h2 id="erst-mal-worüber-reden-wir-überhaupt">Erst mal: worüber reden
+wir überhaupt?</h2>
+<p>Drei Konzepte werden regelmäßig verwechselt:</p>
+<h3 id="event-sourcing">Event Sourcing</h3>
+<p><strong>Der State einer Entität ist die Summe aller Events, die sie
+verändert haben.</strong> Statt “Kunde Meyer hat Adresse X” speichert
+man:</p>
+<ul>
+<li>2024-01-15: Kunde Meyer angelegt</li>
+<li>2024-03-22: Adresse geändert auf Y</li>
+<li>2024-11-05: Adresse geändert auf X</li>
+</ul>
+<p>Der aktuelle State wird durch <em>Replay</em> dieser Events
+rekonstruiert. Vorteil: komplette Historie, beliebige Zeitreise, Audit
+out of the box. Nachteil: Jede Query, die nicht auf einem aggregierten
+View läuft, wird teuer.</p>
+<h3 id="event-driven-architecture">Event-Driven Architecture</h3>
+<p><strong>Komponenten kommunizieren über Events statt über synchrone
+API-Calls.</strong> Service A schreibt “Bestellung aufgegeben”, Service
+B (Lager), Service C (Buchhaltung) und Service D (E-Mail) reagieren
+unabhängig darauf. Kein zentrales Orchestrieren, keine Zeitkopplung.
+Event Sourcing ist dafür nicht zwingend — die Events können auch nur als
+Messages fließen, ohne persistiert zu werden.</p>
+<h3 id="change-data-capture-cdc">Change Data Capture (CDC)</h3>
+<p><strong>Jede Änderung in einer klassischen CRUD-Datenbank wird als
+Event ausgeleitet.</strong> Die Wahrheit liegt weiter in Tables, aber
+ein Stream von <code>INSERT/UPDATE/DELETE</code>-Events fließt parallel
+raus — für Replikation, Suchindizes, Data Warehouses. Debezium ist das
+bekannteste Tool dafür. Das ist <em>pragmatisches Event-Driven</em> ohne
+Event Sourcing.</p>
+<p>Diese drei Konzepte sind <strong>unabhängig voneinander</strong>. Man
+kann das eine ohne das andere machen. Die meisten “Event”-Architekturen
+in der Praxis sind eine Mischung aus CDC und Event-Driven Architecture —
+reines Event Sourcing ist selten, weil es Aggregationen und Queries
+schmerzhaft macht.</p>
+<h2 id="warum-das-überhaupt-interessant-ist">Warum das überhaupt
+interessant ist</h2>
+<p>Für Architekten sind die Argumente meist diese:</p>
+<p><strong>Vollständige Historie.</strong> Ein klassisches UPDATE
+überschreibt Information. Bei Event-basierten Systemen geht nichts
+verloren — auch nicht der Zustand von gestern, oder die Reihenfolge, in
+der Dinge passiert sind. Wer jemals einen Audit für Finanz- oder
+Gesundheitsdaten begleiten musste, weiß was das wert ist.</p>
+<p><strong>Entkopplung.</strong> Neue Consumer können jederzeit
+dazukommen, ohne dass bestehende Services angepasst werden. Der Service,
+der Events schreibt, weiß nichts von ihnen.</p>
+<p><strong>Reaktive Pipelines.</strong> Sobald ein Event geschrieben
+wird, kann beliebig viel darauf reagieren: Indexe aktualisieren,
+Benachrichtigungen senden, Machine-Learning-Pipelines triggern.</p>
+<p><strong>Semantische Suche.</strong> Hier kommt ein neues Argument
+hinzu, das vor fünf Jahren noch nicht galt: Events sind in der Regel
+Text-lastig (Beschreibung, Kommentar, Klartext). Mit Vector-Embeddings
+lassen sie sich <em>semantisch</em> durchsuchen — “zeig mir alle Events
+zu Kunden-Eskalationen in Q3” ohne vorher Kategorien anlegen zu
+müssen.</p>
+<p>Das letzte Argument ist für uns bei OOS der entscheidende gewesen.
+Dazu unten mehr.</p>
+<h2 id="die-landschaft-der-event-stores">Die Landschaft der
+Event-Stores</h2>
+<p>Jetzt zur Frage, die Architekten wirklich beschäftigt: <strong>welche
+Datenbank?</strong> Eine nüchterne Einordnung der Kandidaten.</p>
+<h3 id="eventstoredb">EventStoreDB</h3>
+<p>Der spezialisierte Klassiker, konzipiert rein für Event Sourcing.
+Streams als First-Class-Citizen, Projections eingebaut, ordentliches
+Tooling.</p>
+<p><em>Stärken:</em> Konzeptuelle Sauberkeit, optimiert für Replay.
+<em>Schwächen:</em> Nischenprodukt, überschaubares Ökosystem, weniger
+Entwickler kennen es, keine Vector-Suche, kein gutes Story für
+aggregierte Queries.</p>
+<p>Gute Wahl, wenn ihr wirklich <strong>reines Event Sourcing</strong>
+betreibt und das Team die Expertise aufbauen will. Für die meisten
+Projekte: Overkill.</p>
+<h3 id="apache-kafka">Apache Kafka</h3>
+<p>Streng genommen keine Datenbank, sondern ein verteilter Log. Aber
+wird oft als Event-Backbone eingesetzt und hat mit Kafka Streams und
+KSQL inzwischen datenbank-ähnliche Features.</p>
+<p><em>Stärken:</em> Maximal skalierbar, riesiges Ökosystem,
+de-facto-Standard für Event-Streaming zwischen Services.
+<em>Schwächen:</em> Kein Query-Interface für historische Daten im Sinne
+einer DB. Operations-intensiv (Brokers, Zookeeper/KRaft, Partitioning).
+Keine Transaktionen über mehrere Topics. Kein nativer
+Vector-Support.</p>
+<p>Richtige Wahl, wenn ihr <strong>zwischen vielen Services</strong>
+Events durchreicht und Throughput im sechsstelligen Bereich pro Sekunde
+braucht. Falsche Wahl als einzige Datenbank.</p>
+<h3 id="mongodb-change-streams">MongoDB Change Streams</h3>
+<p>MongoDB hat seit Jahren eingebaute Change Streams — jeder
+Document-Change wird als Event konsumierbar. Kein separates CDC-Tool
+nötig.</p>
+<p><em>Stärken:</em> Wenn MongoDB eh da ist, praktisch kostenlos dazu.
+Flexibles Schema. Mit Atlas Vector Search auch Vector-Suche.
+<em>Schwächen:</em> Change Streams sind CDC, kein Event Sourcing. Keine
+Replay-Funktion über alte Events jenseits des Oplog-Retention-Fensters.
+Cluster-Konfiguration (Replica Set) ist Pflicht.</p>
+<p>Gute Wahl für Teams, die MongoDB ohnehin einsetzen und nicht reines
+Event Sourcing brauchen.</p>
+<h3 id="dynamodb-streams">DynamoDB Streams</h3>
+<p>AWS-spezifisches CDC: jede Änderung an einer DynamoDB-Tabelle wird
+als Stream verfügbar, typischerweise zusammen mit Lambda.</p>
+<p><em>Stärken:</em> Serverless, skaliert magisch, minimale Ops-Last.
+<em>Schwächen:</em> Lock-in in AWS. 24h Retention limitiert das Fenster.
+Kein Vector-Support. Queries jenseits des Primary Key sind historisch
+umständlich (inzwischen besser mit Aggregate-Indexen).</p>
+<p>Gute Wahl für AWS-native Teams mit serverless Mindset. Falsche Wahl,
+wenn man Portabilität will.</p>
+<h3 id="arangodb">ArangoDB</h3>
+<p>Multi-Model: Documents, Graphs, Key-Value in einer DB. Kein
+dedizierter Event-Store, aber durch Graph-Fähigkeit und flexible Schemas
+sehr gut geeignet, wenn Events <em>Beziehungen</em> haben.</p>
+<p><em>Stärken:</em> Eine einzige DB für sehr unterschiedliche
+Zugriffsmuster. AQL (Query Language) ist ausdrucksstark.
+Graph-Traversals sind nativ. <em>Schwächen:</em> Kleineres Ökosystem als
+Postgres/Mongo. Vector-Support ist inzwischen da, aber weniger mature
+als pgvector. Lizenzmodell hat sich über die Jahre mehrfach geändert —
+wert zu prüfen.</p>
+<p>Wenn eure Events ein natürliches Graph-Modell haben (wer-kennt-wen,
+Aktions-Ketten, Causation), ist ArangoDB ein <strong>ernsthafter
+Kandidat</strong>. Ein schönes Produkt, das in Deutschland/Schweiz
+verbreitet ist und weniger Hype-getrieben als viele Alternativen.</p>
+<h3 id="surrealdb">SurrealDB</h3>
+<p>Jung, ehrgeizig, Multi-Model, eingebaute Live-Queries, auch Graph-
+Fähigkeiten. Rust-geschrieben, einzelnes Binary.</p>
+<p><em>Stärken:</em> Developer Experience ist frisch und modern.
+Live-Queries (Subscription auf Query-Ergebnisse) sind eingebaut.
+WebSocket-native. <em>Schwächen:</em> <strong>Jung.</strong>
+Produktionsreife ist noch nicht breit bewiesen. Weniger Mitarbeiter mit
+Erfahrung auf dem Arbeitsmarkt. Bei echten Problemen steht man schnell
+alleine da.</p>
+<p>Spannend für Prototypen und Greenfield-Projekte mit
+experimentierfreudigem Team. Für Enterprise-Entscheidungen heute (noch)
+zu riskant.</p>
+<h3 id="postgresql-mit-pgvector">PostgreSQL mit pgvector</h3>
+<p>Das Arbeitspferd. Seit über 30 Jahren im Einsatz. Mit der
+pgvector-Extension kann es Vector-Embeddings speichern und durchsuchen.
+Mit <code>LISTEN/NOTIFY</code> hat es einen eingebauten Event-Bus. Mit
+JSONB hat es flexible Payloads. Mit logischer Replikation hat es
+CDC.</p>
+<p><em>Stärken:</em> Praktisch jeder hat einen. Transaktionen.
+Ausgereifte Ops-Werkzeuge. Riesiger Talent-Pool. Konservative
+Default-Wahl, die auch in zehn Jahren noch funktionieren wird.
+<em>Schwächen:</em> Nichts davon ist “Event-native”. Man muss
+Konventionen selbst definieren. Skaliert nicht auf Kafka-Niveau.</p>
+<h2 id="warum-wir-postgresql-gewählt-haben">Warum wir PostgreSQL gewählt
+haben</h2>
+<p>Für OOS war die Entscheidung am Ende nicht die Liste der Features,
+sondern drei nüchterne Überlegungen:</p>
+<p><strong>1. Infrastruktur, die sowieso da ist.</strong> Jeder Kunde,
+der OOS einsetzt, hat bereits einen PostgreSQL-Server. Die
+Einstiegshürde ist null. Wir brauchen keinen zusätzlichen Broker zu
+betreiben, keine zweite Backup-Strategie, kein zweites Monitoring. Das
+ist für ein junges Produkt existenziell wichtig.</p>
+<p><strong>2. Transaktionen.</strong> Unsere Events beschreiben
+Zustandsänderungen an Geschäftsdaten. Wenn ein Event geschrieben wird,
+müssen gleichzeitig Counter, Indizes und abgeleitete Tabellen konsistent
+aktualisiert werden. Postgres erlaubt uns das <em>in einer
+Transaktion</em>. Kafka kann das prinzipiell nicht.</p>
+<p><strong>3. Der Vector-Search-Use-Case.</strong> Wir wollen über
+Events nicht nur nach ID oder Zeitfenster suchen, sondern semantisch.
+“Finde alle Events zu diesem Fall, die sich ähnlich anhören wie diese
+Beschreibung hier.” pgvector macht genau das — Embedding-Spalte anlegen,
+Index drauf, <code>ORDER BY embedding &lt;=&gt; $1</code>. Fertig. Keine
+zweite Datenbank, kein Sync-Problem zwischen Event-Store und
+Vector-DB.</p>
+<p>Das ergibt sich dann in einer Architektur, die unspektakulär aber
+belastbar ist:</p>
+<ul>
+<li><strong>Source-Tables</strong> enthalten die eigentlichen Event-Rows
+(Zeit, Typ, Payload als JSONB, Stream-ID).</li>
+<li><strong>Ein Trigger</strong> schickt bei jedem INSERT eine
+<code>NOTIFY</code> an einen Kanal.</li>
+<li><strong>Ein Background-Worker</strong> hört mit <code>LISTEN</code>
+zu, lädt das neue Event, generiert das Embedding und schreibt es in eine
+<strong>Target-Table</strong> mit Vector-Spalte.</li>
+<li><strong>Eine kleine Mapping-Tabelle</strong> verbindet Source und
+Target und erlaubt, neue Event-Typen rein per Konfiguration
+hinzuzufügen.</li>
+</ul>
+<p>Das sind keine 500 Zeilen Go-Code. Und es läuft auf jedem PostgreSQL
+ab Version 14 ohne Extras außer pgvector.</p>
+<h2 id="was-ihr-damit-nicht-bekommt">Was ihr damit <em>nicht</em>
+bekommt</h2>
+<p>Ehrlichkeit ist wichtiger als Verkaufsargumente. Unser Ansatz hat
+klare Grenzen:</p>
+<ul>
+<li><strong>Kein reines Event Sourcing.</strong> Wir replayen keine
+Event-Streams zur Rekonstruktion von Aggregaten. Wer das braucht, ist
+mit EventStoreDB oder einer sauberen Kafka-Architektur besser
+bedient.</li>
+<li><strong>Kein hoher Durchsatz.</strong> Wir reden von Hunderten bis
+wenigen Tausend Events pro Sekunde. Wer Millionen braucht, nimmt
+Kafka.</li>
+<li><strong>Keine Multi-Region-Replikation out of the box.</strong>
+Postgres kann das, aber nicht so elegant wie cloud-native Stores.</li>
+<li><strong>pgvector ist nicht die schnellste Vector-DB.</strong> Für
+riesige Vektor- Korpora (&gt;100M Vektoren) sind dedizierte Stores wie
+Qdrant oder Milvus schneller. Bis in den Millionen-Bereich ist pgvector
+völlig okay.</li>
+</ul>
+<h2 id="die-faustregel-für-die-entscheidung">Die Faustregel für die
+Entscheidung</h2>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>Eure Situation</th>
+<th>Empfehlung</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Ihr habt PostgreSQL, braucht Event-Features pragmatisch</td>
+<td><strong>PostgreSQL + pgvector</strong></td>
+</tr>
+<tr>
+<td>Kafka läuft schon, Events sind der Kleber zwischen Services</td>
+<td><strong>Kafka</strong> (+ eigene DB für Queries)</td>
+</tr>
+<tr>
+<td>Reines Event Sourcing, Audit ist Produktkern</td>
+<td><strong>EventStoreDB</strong></td>
+</tr>
+<tr>
+<td>AWS-only, serverless first</td>
+<td><strong>DynamoDB Streams</strong></td>
+</tr>
+<tr>
+<td>Events haben starke Graph-Struktur</td>
+<td><strong>ArangoDB</strong></td>
+</tr>
+<tr>
+<td>MongoDB ist eh euer Haupt-Store</td>
+<td><strong>Change Streams</strong> reichen meist</td>
+</tr>
+<tr>
+<td>Greenfield, experimentierfreudig, kein Produktionsdruck</td>
+<td><strong>SurrealDB</strong> ernsthaft anschauen</td>
+</tr>
+</tbody>
+</table>
+<p>Die traurige Wahrheit: für die meisten Unternehmen ist
+<strong>PostgreSQL die richtige Antwort</strong>, nicht weil es
+technisch brillant ist, sondern weil es <em>da</em> ist, es
+funktioniert, und man sich auf die wirklich interessanten
+Architekturfragen konzentrieren kann statt auf Ops.</p>
+<p>Die Dinger, die euch in fünf Jahren wirklich weh tun werden, sind
+selten die Datenbankwahl. Es sind die Schemas, die ihr nicht migrieren
+konntet, die Events, deren Bedeutung niemand mehr kennt, und die
+Kopplungen, die sich durch den Code gefressen haben. Da hilft keine
+fancy Event-DB — das bleibt Handarbeit.</p>
+<h2 id="fazit">Fazit</h2>
+<p><strong>Events sind kein Buzzword, sondern ein legitimes und oft
+unterschätztes Architektur-Muster.</strong> Die vollständige Historie,
+die Entkopplung, und inzwischen die Möglichkeit semantischer Suche
+rechtfertigen die zusätzliche Komplexität in vielen Projekten.</p>
+<p>Aber die Wahl des Stores ist oft weniger wichtig als die Architektur
+selbst. Ein PostgreSQL mit sauberer Event-Tabelle,
+<code>LISTEN/NOTIFY</code> und pgvector löst 80% der Fälle. Die
+restlichen 20% sind die, wo ihr wisst, dass ihr sie habt — weil der
+Durchsatz, die Compliance-Anforderung oder die Graph-Struktur es
+erzwingen.</p>
+<p>Wenn ihr in einem Architektur-Meeting das nächste Mal zwischen
+EventStoreDB, Kafka und SurrealDB abwägt, fragt zuerst: <strong>was ist
+unsere eigentliche Schmerzgrenze?</strong> Meistens ist die Antwort:
+“Wir haben Postgres. Geht das damit auch?” Die Antwort lautet
+überraschend oft: ja.</p>
+<hr />
+<p><strong>In eigener Sache:</strong> OOS nutzt das oben skizzierte
+Muster in Produktion. Die technischen Details und der Go-Code hinter der
+Event-Mapping-Schicht sind in unserer Doku beschrieben. Für die
+Architekturdiskussion im eigenen Team ist die Code-Ebene allerdings
+meist weniger relevant als die Fragen oben.</p>
+
+    <div class="post-footer">
+      <a href="/blog/">← Zurück zur Übersicht</a>
+      <span>© 2026 Frank &amp; Tristan von Schrenk</span>
+    </div>
+  </article>
+</div>
+
+<footer class="site">
+  <div class="wrap">
+    <div>© 2026 Frank &amp; Tristan von Schrenk · onisin OS ist source-available.</div>
+    <div>
+      <a href="https://docs.onisin.com">Docs</a>
+      &nbsp;·&nbsp;
+      <a href="https://docs.onisin.com/license.html">License</a>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>
