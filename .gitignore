@@ -1,2 +1,9 @@
 .idea/
 .DS_Store
+
+# Obsidian vault configuration. The blog/ folder is used as a vault
+# so writing Markdown feels comfortable, but per-machine settings,
+# workspace layouts, installed plugins and themes should not be
+# committed. If you later decide to share a specific setting across
+# machines (e.g. a template snippet), commit it explicitly.
+.obsidian/
