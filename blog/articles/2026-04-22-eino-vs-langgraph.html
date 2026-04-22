@@ -1,0 +1,740 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Eino vs. LangGraph — oder: wann braucht man eigentlich ein
+Agent-Framework? — onisin OS Blog</title>
+  <meta name="description" content="Jede Woche ein neues
+Agent-Framework. Lohnt sich das wirklich, oder reicht ein for-Loop? Eine
+Analyse mit lauffähigem Go-Beispiel — Spesenprüfer mit Eino,
+Human-in-the-Loop, Checkpointing und Resume nach Crash.">
+  <link rel="stylesheet" href="../blog.css">
+</head>
+<body>
+
+<header class="site">
+  <div class="wrap">
+    <div class="brand">
+      <span class="dot"></span>
+      <a href="/">onisin OS</a>
+    </div>
+    <nav class="primary">
+      <a href="/#how">Wie es funktioniert</a>
+      <a href="/#security">Sicherheit</a>
+      <a href="/blog/" class="active">Blog</a>
+      <a href="https://docs.onisin.com">Docs</a>
+      <a class="gh-link" href="https://github.com/frankvschrenk/onisin"
+         target="_blank" rel="noopener" aria-label="onisin OS on GitHub">
+        <svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"
+             fill="currentColor" aria-hidden="true">
+          <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/>
+        </svg>
+        <span>GitHub</span>
+      </a>
+    </nav>
+  </div>
+</header>
+
+<div class="wrap">
+  <article class="post">
+    <header class="post-head">
+      <div class="post-meta">22. April 2026</div>
+      <h1>Eino vs. LangGraph — oder: wann braucht man eigentlich ein
+Agent-Framework?</h1>
+    </header>
+
+<p>Jede Woche ein neues Framework, jede Woche ein neues Buzzword.
+LangGraph, Eino, AutoGen, CrewAI, LangChain, MLflow… Irgendwann wird man
+müde davon und fragt sich: <strong>lohnt sich das wirklich, oder reicht
+ein <code>for</code>-Loop?</strong></p>
+<p>Dieser Post ist der Versuch, genau das zu beantworten. Nicht
+theoretisch, sondern an einem konkreten, lauffähigen Beispiel. Am Ende
+steht ein Go-Projekt mit Eino, das eine Spesenabrechnung gegen eine
+Richtlinie prüft — inklusive Human-in-the-Loop, Checkpointing und
+Resume-nach-Crash.</p>
+<h2 id="wann-ein-agent-loop-wirklich-nötig-ist">Wann ein Agent-Loop
+wirklich nötig ist</h2>
+<p>Die ehrliche Antwort zuerst: <strong>meistens nicht.</strong> 90% der
+LLM-Features in produktiven Apps sind ein einzelner API-Call. Die
+anderen 10% sind entweder trivial (20 Zeilen Go) oder wirklich komplex.
+Nur bei letzterem zahlt sich ein Framework aus.</p>
+<p>Die Daumenregel: Ein Framework lohnt sich, wenn die <strong>Schritte
+nicht vorhersehbar</strong> sind. Der Agent weiß zu Beginn nicht, wie
+viele Iterationen nötig werden. Jeder Schritt hängt vom Ergebnis des
+vorherigen ab.</p>
+<h3 id="warum-airflow-co.-nicht-reichen">Warum Airflow &amp; Co. nicht
+reichen</h3>
+<p>Klassische Workflow-Engines wie Airflow basieren auf
+<strong>DAGs</strong> — gerichteten azyklischen Graphen. Der Ablauf ist
+fest verdrahtet:</p>
+<pre><code>[Start] → [LLM] → [Tool] → [LLM] → [Tool] → [LLM] → [Ende]</code></pre>
+<p>Bei einem Agent weißt du aber vorher nicht, wie oft <code>Tool</code>
+aufgerufen wird. Mal einmal, mal fünfmal. Das ist ein
+<strong>Zyklus</strong> — und genau den erlauben klassische DAG-Tools
+nicht.</p>
+<h3 id="beispiel-coding-agent">Beispiel: Coding-Agent</h3>
+<p>Der typischste Fall, den wirklich jeder kennt — Claude Code, Cursor,
+Aider:</p>
+<pre><code>User: &quot;Fix den failing Test in auth_test.go&quot;
+
+Loop:
+  1. read_file(auth_test.go)        → sieht Test
+  2. read_file(auth.go)              → sieht Implementation
+  3. run_tests()                     → sieht Fehler: &quot;expected 200, got 401&quot;
+  4. grep(&quot;validateToken&quot;)           → findet weitere Stelle
+  5. read_file(middleware.go)        → sieht Bug
+  6. edit_file(middleware.go, ...)   → fixt
+  7. run_tests()                     → immer noch rot, anderer Fehler
+  8. read_file(...)                  → analysiert neu
+  9. edit_file(...)                  → fixt nochmal
+  10. run_tests()                    → grün
+  → Ende</code></pre>
+<p>Das LLM <em>kann nicht wissen</em>, welche Dateien relevant sind,
+bevor es den Testfehler gesehen hat. Jeder Schritt hängt vom Ergebnis
+des vorherigen ab. Das ist ein echter agentischer Loop.</p>
+<h3 id="gegenbeispiel-e-mail-schreiben">Gegen­beispiel: E-Mail
+schreiben</h3>
+<p>Dagegen ist dies <strong>kein</strong> guter Use-Case für ein
+Framework:</p>
+<pre><code>User: &quot;Schick eine Mail an X mit Inhalt Y&quot;
+  1. draft_email(X, Y)
+  2. spellcheck()
+  3. send_email()</code></pre>
+<p>Drei Tool-Calls, aber keiner davon hängt vom Ergebnis des vorherigen
+ab. Das ist ein <strong>linearer Workflow</strong>, den man mit drei
+<code>if</code>s erschlagen kann. Kein Framework nötig.</p>
+<h2 id="drei-muster-für-human-in-the-loop">Drei Muster für
+Human-in-the-Loop</h2>
+<p>Sobald ein Agent destruktive Aktionen ausführen soll (Mail senden,
+Daten löschen, Geld überweisen), braucht es Absicherung. Es gibt grob
+drei Muster, von “dumm aber zuverlässig” bis “smart aber
+unberechenbar”:</p>
+<h3 id="muster-1-hardcoded-gates">Muster 1: Hardcoded Gates</h3>
+<p>Der Entwickler legt fest: <strong>Diese Tool-Kategorien erfordern
+immer eine Bestätigung.</strong> Egal was das LLM denkt.</p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="co">// RequiresApproval returns true for tools that must not execute</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="co">// without explicit human confirmation, regardless of LLM judgment.</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> RequiresApproval<span class="op">(</span>toolName <span class="dt">string</span><span class="op">)</span> <span class="dt">bool</span> <span class="op">{</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">switch</span> toolName <span class="op">{</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">case</span> <span class="st">&quot;send_email&quot;</span><span class="op">,</span></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>         <span class="st">&quot;execute_payment&quot;</span><span class="op">,</span></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>         <span class="st">&quot;delete_file&quot;</span><span class="op">,</span></span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>         <span class="st">&quot;run_sql_write&quot;</span><span class="op">,</span></span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>         <span class="st">&quot;deploy_to_production&quot;</span><span class="op">:</span></span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="ot">true</span></span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">default</span><span class="op">:</span></span>
+<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="ot">false</span></span>
+<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb4-14"><a href="#cb4-14" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p><strong>Vorteil:</strong> Deterministisch, auditierbar, kann nicht
+umgangen werden. <strong>Nachteil:</strong> Fragt auch bei
+offensichtlich harmlosen Dingen.</p>
+<h3 id="muster-2-schwellwert-basiert">Muster 2: Schwellwert-basiert</h3>
+<p>Das LLM muss bei jedem Tool-Call eine Einschätzung mitgeben
+(<code>impact</code>, <code>reversible</code>,
+<code>cost_estimate</code>), die der Code gegen hardcodete Schwellwerte
+prüft.</p>
+<p><strong>Vorteil:</strong> Adaptiver als Muster 1.
+<strong>Nachteil:</strong> Das LLM kann sich bei der Einschätzung irren
+— typischerweise in die falsche Richtung.</p>
+<h3 id="muster-3-llm-fragt-aktiv">Muster 3: LLM fragt aktiv</h3>
+<p>Das LLM bekommt ein explizites Tool <code>ask_human</code>, das es
+bei Unsicherheit aufrufen kann.</p>
+<p><strong>Vorteil:</strong> Fühlt sich natürlich an.
+<strong>Nachteil:</strong> LLMs sind berüchtigt dafür, <strong>zu
+selten</strong> zu fragen. Sie machen lieber überzeugt Unsinn.</p>
+<h3 id="die-realität">Die Realität</h3>
+<p>Anthropic, OpenAI und andere verlassen sich <strong>primär auf Muster
+1</strong>, ergänzt durch Muster 2 und 3. Das LLM selbst die
+Entscheidung treffen zu lassen, ist unzuverlässig, weil:</p>
+<ol type="1">
+<li><strong>LLMs sind schlecht kalibriert.</strong> Ihre Confidence
+korreliert oft nicht mit Korrektheit.</li>
+<li><strong>Prompt Injection.</strong> Ein bösartiger Input im Kontext
+kann das LLM überreden, <em>nicht</em> zu fragen. Bei hardcoded Gates
+geht das nicht.</li>
+<li><strong>Konsistenz.</strong> Du willst, dass der Agent sich heute
+genauso verhält wie morgen. LLM-Entscheidungen schwanken.</li>
+</ol>
+<h2 id="eino-vs.-langgraph-im-überblick">Eino vs. LangGraph im
+Überblick</h2>
+<p>Eino wurde speziell entwickelt, um die Einschränkungen von
+klassischen, linearen Ketten (wie in der Standard-LangChain) zu
+überwinden:</p>
+<ul>
+<li><strong>Graph-basierte Architektur:</strong> Genau wie LangGraph
+basiert Eino auf der Idee eines Graphen. Man definiert Knoten (Nodes)
+und Kanten (Edges).</li>
+<li><strong>Zyklen und Schleifen:</strong> Eino erlaubt es nativ,
+Graphen mit Schleifen zu bauen. Das ist die Kernkompetenz von LangGraph,
+um Agenten zu erstellen, die ihre eigenen Antworten reflektieren oder
+Aufgaben wiederholen können.</li>
+<li><strong>State Management:</strong> In Eino fließt ein Kontext durch
+den Graphen, der an jedem Knoten gelesen oder verändert werden kann —
+fast identisch zum “State” in LangGraph.</li>
+</ul>
+<table>
+<colgroup>
+<col style="width: 22%" />
+<col style="width: 38%" />
+<col style="width: 38%" />
+</colgroup>
+<thead>
+<tr>
+<th>Aspekt</th>
+<th>LangGraph</th>
+<th>Eino</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Sprache</strong></td>
+<td>Python</td>
+<td>Go</td>
+</tr>
+<tr>
+<td><strong>Hersteller</strong></td>
+<td>LangChain Inc.</td>
+<td>ByteDance (CloudWeGo)</td>
+</tr>
+<tr>
+<td><strong>Typisierung</strong></td>
+<td>Dynamisch (TypedDict/Pydantic als Aufsatz)</td>
+<td>Statisch, Generics ab Go 1.18</td>
+</tr>
+<tr>
+<td><strong>Kern-Abstraktion</strong></td>
+<td>Graph mit State-Dict</td>
+<td>Chain / Graph / Workflow (drei Paradigmen)</td>
+</tr>
+<tr>
+<td><strong>State-Handling</strong></td>
+<td>Shared mutable State, reducer-basiert</td>
+<td>Typisierte Input/Output pro Node</td>
+</tr>
+<tr>
+<td><strong>Zyklen</strong></td>
+<td>Ja, über conditional edges</td>
+<td>Ja, über Graph-Branching</td>
+</tr>
+<tr>
+<td><strong>Checkpointing</strong></td>
+<td>Ja (SQLite/Postgres/Memory)</td>
+<td>Ja</td>
+</tr>
+<tr>
+<td><strong>Human-in-the-loop</strong></td>
+<td>Ja, interrupt()</td>
+<td>Ja, Pause/Resume</td>
+</tr>
+<tr>
+<td><strong>Streaming</strong></td>
+<td>Ja, token-level</td>
+<td>Ja, nativ mit StreamReader</td>
+</tr>
+<tr>
+<td><strong>Tool-Calling</strong></td>
+<td>Über LangChain-Tools</td>
+<td>Eigene Tool-Interfaces</td>
+</tr>
+<tr>
+<td><strong>Multi-Provider</strong></td>
+<td>LangChain-Ökosystem (sehr breit)</td>
+<td>OpenAI, Claude, Gemini, Doubao, Ark</td>
+</tr>
+<tr>
+<td><strong>Dependency-Footprint</strong></td>
+<td>Groß (LangChain-Kette)</td>
+<td>Modular, Core schlank, Ext separat</td>
+</tr>
+<tr>
+<td><strong>Tracing</strong></td>
+<td>LangSmith (kommerziell)</td>
+<td>Langfuse-Callback eingebaut</td>
+</tr>
+<tr>
+<td><strong>Produktions-Einsatz</strong></td>
+<td>Viele Startups, teils Enterprise</td>
+<td>Doubao, TikTok intern</td>
+</tr>
+<tr>
+<td><strong>Reife</strong></td>
+<td>Seit 2024, schnelle Iteration</td>
+<td>Seit Anfang 2025 open source</td>
+</tr>
+<tr>
+<td><strong>Lock-in-Risiko</strong></td>
+<td>Hoch (LangChain-Abstraktionen überall)</td>
+<td>Mittel (Core ist isoliert)</td>
+</tr>
+<tr>
+<td><strong>Lernkurve</strong></td>
+<td>Flach am Anfang, tief bei State-Reducern</td>
+<td>Steiler Einstieg, drei Paradigmen</td>
+</tr>
+</tbody>
+</table>
+<h2 id="praxisbeispiel-spesenabrechnungs-prüfer">Praxisbeispiel:
+Spesenabrechnungs-Prüfer</h2>
+<p>Um Eino konkret zu zeigen, baue ich einen Agent, der einen Stapel
+Belege gegen eine Firmen-Reisekostenrichtlinie prüft und am Ende eine
+Spesenabrechnung zur Freigabe vorschlägt.</p>
+<p><strong>Warum das ein echter Agent-Loop ist:</strong> Der Agent weiß
+zu Beginn <strong>nicht</strong>, wie viele Belege es gibt, welche Art
+Ausgaben drin sind, oder welche gegen welche Policy-Regel verstoßen.
+Jeder Schritt hängt vom vorherigen ab. Wenn ein Beleg ein Abendessen für
+180€ zeigt, muss der Agent in der Policy nachsehen. Wenn die Policy sagt
+“max 80€ außer mit Kunde”, muss er prüfen, ob der Beleg einen Kunden
+nennt. Die Reihenfolge ergibt sich aus den Ergebnissen.</p>
+<h3 id="die-tools">Die Tools</h3>
+<table>
+<thead>
+<tr>
+<th>Tool</th>
+<th>Effekt</th>
+<th>Approval?</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>list_receipts()</code></td>
+<td>liest Ordner</td>
+<td>auto</td>
+</tr>
+<tr>
+<td><code>read_receipt(filename)</code></td>
+<td>liest einen Beleg</td>
+<td>auto</td>
+</tr>
+<tr>
+<td><code>read_policy()</code></td>
+<td>liest Richtliniendatei</td>
+<td>auto</td>
+</tr>
+<tr>
+<td><code>approve_receipt(file, amount)</code></td>
+<td>merkt Beleg vor</td>
+<td>auto</td>
+</tr>
+<tr>
+<td><code>flag_issue(file, reason)</code></td>
+<td>markiert Problem</td>
+<td>auto</td>
+</tr>
+<tr>
+<td><code>ask_human(question)</code></td>
+<td>fragt User</td>
+<td>auto (Muster 3)</td>
+</tr>
+<tr>
+<td><code>submit_expense_report()</code></td>
+<td><strong>reicht ein</strong></td>
+<td><strong>APPROVAL (Muster 1)</strong></td>
+</tr>
+</tbody>
+</table>
+<h3 id="testdaten">Testdaten</h3>
+<p>Fünf Belege mit absichtlich eingebauten Problemen:</p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>Datei</th>
+<th>Betrag</th>
+<th>Erwartetes Verhalten</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>2026-04-10-lunch.txt</code></td>
+<td>21,50 €</td>
+<td>✅ klar ok, unter 35€ Limit</td>
+</tr>
+<tr>
+<td><code>2026-04-11-dinner.txt</code></td>
+<td>95,50 €</td>
+<td>⚠️ Grauzone: über 80€ Dinner-Limit, ABER Kunde auf Rückseite genannt
+→ Kundenessen bis 150€ erlaubt. <strong>Plus</strong>: Grappa = 2.
+alkoholisches Getränk bei Kundenessen, nur 1 erlaubt</td>
+</tr>
+<tr>
+<td><code>2026-04-11-taxi.txt</code></td>
+<td>14,80 €</td>
+<td>✅ ok, 23:40 Uhr ist nach 23:00</td>
+</tr>
+<tr>
+<td><code>2026-04-12-hotel.txt</code></td>
+<td>482,00 €</td>
+<td>⚠️ 220€/Nacht übersteigt 180€ Großstadt-Limit</td>
+</tr>
+<tr>
+<td><code>2026-04-11-minibar.txt</code></td>
+<td>14,00 €</td>
+<td>❌ Minibar nicht erstattungsfähig laut Policy</td>
+</tr>
+</tbody>
+</table>
+<p>Zwei klare Fälle, zwei Grenzfälle, ein Ablehnungsfall. Genug Stoff
+für einen Agent, der wirklich denken muss.</p>
+<h3 id="projektstruktur">Projektstruktur</h3>
+<pre><code>agentic/
+├── go.mod
+├── main.go
+├── testdata/
+│   ├── policy.md
+│   └── receipts/
+│       ├── 2026-04-10-lunch.txt
+│       ├── 2026-04-11-dinner.txt
+│       ├── 2026-04-11-minibar.txt
+│       ├── 2026-04-11-taxi.txt
+│       └── 2026-04-12-hotel.txt
+└── internal/
+    ├── agent/agent.go         # der Loop
+    ├── tools/tools.go         # Tools + Approval-Gate
+    └── checkpoint/checkpoint.go  # State-Persistenz</code></pre>
+<h3 id="der-chat-model-aufruf">Der Chat-Model-Aufruf</h3>
+<p>Ein wichtiger Punkt: statt des nativen Ollama-Clients von Eino
+verwende ich den <strong>OpenAI-kompatiblen Client</strong> gegen
+Ollamas <code>/v1</code>-Endpoint. Das umgeht eine ganze Klasse von
+Kompatibilitätsproblemen (insbesondere mit Gemma- Modellen) und
+funktioniert in der Praxis zuverlässig:</p>
+<div class="sourceCode" id="cb6"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>chatModel<span class="op">,</span> err <span class="op">:=</span> einoopenai<span class="op">.</span>NewChatModel<span class="op">(</span>ctx<span class="op">,</span> <span class="op">&amp;</span>einoopenai<span class="op">.</span>ChatModelConfig<span class="op">{</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>    BaseURL<span class="op">:</span> <span class="st">&quot;http://localhost:11434/v1&quot;</span><span class="op">,</span></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>    APIKey<span class="op">:</span>  <span class="st">&quot;ollama&quot;</span><span class="op">,</span>  <span class="co">// Ollama akzeptiert jeden non-empty key</span></span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>    Model<span class="op">:</span>   <span class="st">&quot;gemma4:26b&quot;</span><span class="op">,</span></span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a><span class="op">})</span></span></code></pre></div>
+<h3 id="der-agent-loop-selbst">Der Agent-Loop selbst</h3>
+<p>Eino bietet mit <code>adk.NewChatModelAgent</code> einen
+vorgefertigten Loop. Ich schreibe ihn hier trotzdem selbst aus — weil
+der Lerneffekt bei einem gekapselten Framework-Aufruf gegen null
+geht:</p>
+<div class="sourceCode" id="cb7"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Run executes the agent loop for a single user request.</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> <span class="op">(</span>a <span class="op">*</span>Agent<span class="op">)</span> Run<span class="op">(</span>ctx context<span class="op">.</span>Context<span class="op">,</span> userInput <span class="dt">string</span><span class="op">)</span> <span class="dt">error</span> <span class="op">{</span></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>    messages <span class="op">:=</span> <span class="op">[]*</span>schema<span class="op">.</span>Message<span class="op">{</span></span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>        schema<span class="op">.</span>SystemMessage<span class="op">(</span>systemPrompt<span class="op">),</span></span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>        schema<span class="op">.</span>UserMessage<span class="op">(</span>userInput<span class="op">),</span></span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> i <span class="op">:=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> maxIterations<span class="op">;</span> i<span class="op">++</span> <span class="op">{</span></span>
+<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a>        resp<span class="op">,</span> err <span class="op">:=</span> a<span class="op">.</span>model<span class="op">.</span>Generate<span class="op">(</span>ctx<span class="op">,</span> messages<span class="op">)</span></span>
+<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> err <span class="op">!=</span> <span class="ot">nil</span> <span class="op">{</span></span>
+<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> fmt<span class="op">.</span>Errorf<span class="op">(</span><span class="st">&quot;llm generate: %w&quot;</span><span class="op">,</span> err<span class="op">)</span></span>
+<span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb7-13"><a href="#cb7-13" aria-hidden="true" tabindex="-1"></a>        messages <span class="op">=</span> <span class="bu">append</span><span class="op">(</span>messages<span class="op">,</span> resp<span class="op">)</span></span>
+<span id="cb7-14"><a href="#cb7-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-15"><a href="#cb7-15" aria-hidden="true" tabindex="-1"></a>        <span class="co">// No tool calls: the model considers itself done.</span></span>
+<span id="cb7-16"><a href="#cb7-16" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="bu">len</span><span class="op">(</span>resp<span class="op">.</span>ToolCalls<span class="op">)</span> <span class="op">==</span> <span class="dv">0</span> <span class="op">{</span></span>
+<span id="cb7-17"><a href="#cb7-17" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="ot">nil</span></span>
+<span id="cb7-18"><a href="#cb7-18" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb7-19"><a href="#cb7-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-20"><a href="#cb7-20" aria-hidden="true" tabindex="-1"></a>        <span class="co">// Execute every requested tool call.</span></span>
+<span id="cb7-21"><a href="#cb7-21" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> _<span class="op">,</span> call <span class="op">:=</span> <span class="kw">range</span> resp<span class="op">.</span>ToolCalls <span class="op">{</span></span>
+<span id="cb7-22"><a href="#cb7-22" aria-hidden="true" tabindex="-1"></a>            result <span class="op">:=</span> a<span class="op">.</span>executeToolCall<span class="op">(</span>ctx<span class="op">,</span> call<span class="op">)</span></span>
+<span id="cb7-23"><a href="#cb7-23" aria-hidden="true" tabindex="-1"></a>            messages <span class="op">=</span> <span class="bu">append</span><span class="op">(</span>messages<span class="op">,</span> result<span class="op">)</span></span>
+<span id="cb7-24"><a href="#cb7-24" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb7-25"><a href="#cb7-25" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb7-26"><a href="#cb7-26" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> fmt<span class="op">.</span>Errorf<span class="op">(</span><span class="st">&quot;max iterations reached&quot;</span><span class="op">)</span></span>
+<span id="cb7-27"><a href="#cb7-27" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>Das sind die 20 Zeilen, die einen DAG-Tool wie Airflow nicht abbilden
+können — der Rücksprung <code>tool → llm</code> macht den Zyklus.</p>
+<h2 id="zwischenergebnisse-wo-landen-die-eigentlich">Zwischenergebnisse:
+wo landen die eigentlich?</h2>
+<p>Eine zentrale Frage, die sich spätestens stellt, wenn der Prozess
+länger als ein paar Sekunden läuft: <strong>was passiert, wenn er
+abstürzt?</strong> Alle Iterationen weg?</p>
+<p>Genau dafür gibt es <strong>Checkpointing</strong>. Die Frameworks
+machen es, wir können es auch selbst. Das Muster ist in beiden Fällen
+identisch:</p>
+<ul>
+<li>Es gibt <strong>einen State-Container</strong>, den jeder Step liest
+und erweitert.</li>
+<li>Am Ende jedes Steps wird der komplette State als <strong>JSON
+serialisiert</strong> und in eine <strong>Tabelle</strong>
+geschrieben.</li>
+<li>Jede Zeile ist ein <strong>vollständiger Snapshot</strong> — nicht
+inkrementell.</li>
+<li>Beim Resume lädt man die letzte Zeile für die entsprechende
+<code>thread_id</code>.</li>
+</ul>
+<h3 id="das-schema">Das Schema</h3>
+<div class="sourceCode" id="cb8"><pre
+class="sourceCode sql"><code class="sourceCode sql"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="kw">CREATE</span> <span class="kw">TABLE</span> agent_checkpoints (</span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">id</span>          <span class="dt">INTEGER</span> <span class="kw">PRIMARY</span> <span class="kw">KEY</span> AUTOINCREMENT,</span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>    thread_id   TEXT    <span class="kw">NOT</span> <span class="kw">NULL</span>,</span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>    step        <span class="dt">INTEGER</span> <span class="kw">NOT</span> <span class="kw">NULL</span>,</span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a>    state       TEXT    <span class="kw">NOT</span> <span class="kw">NULL</span>,   <span class="co">-- das volle JSON</span></span>
+<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a>    created_at  TEXT    <span class="kw">NOT</span> <span class="kw">NULL</span>,</span>
+<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a>    <span class="kw">UNIQUE</span> (thread_id, step)</span>
+<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a>);</span></code></pre></div>
+<p>Bei SQLite ist <code>state</code> ein TEXT-Feld mit JSON-Inhalt. Bei
+Postgres würde man <code>JSONB</code> nehmen — der Go-Code bleibt
+identisch, nur der Driver ändert sich.</p>
+<h3 id="was-im-state-steckt">Was im State steckt</h3>
+<div class="sourceCode" id="cb9"><pre
+class="sourceCode json"><code class="sourceCode json"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="fu">{</span></span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;thread_id&quot;</span><span class="fu">:</span> <span class="st">&quot;trip-berlin-0412&quot;</span><span class="fu">,</span></span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;step&quot;</span><span class="fu">:</span> <span class="dv">7</span><span class="fu">,</span></span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;status&quot;</span><span class="fu">:</span> <span class="st">&quot;running&quot;</span><span class="fu">,</span></span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;messages&quot;</span><span class="fu">:</span> <span class="ot">[</span> <span class="er">/*</span> <span class="er">die</span> <span class="er">komplette</span> <span class="er">Konversationshistorie</span> <span class="er">*/</span> <span class="ot">]</span><span class="fu">,</span></span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;approved&quot;</span><span class="fu">:</span> <span class="ot">[</span></span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a>    <span class="fu">{</span><span class="dt">&quot;file&quot;</span><span class="fu">:</span> <span class="st">&quot;2026-04-10-lunch.txt&quot;</span><span class="fu">,</span> <span class="dt">&quot;amount&quot;</span><span class="fu">:</span> <span class="fl">21.50</span><span class="fu">,</span> <span class="dt">&quot;note&quot;</span><span class="fu">:</span> <span class="st">&quot;lunch within limit&quot;</span><span class="fu">}</span></span>
+<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a>  <span class="ot">]</span><span class="fu">,</span></span>
+<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;flagged&quot;</span><span class="fu">:</span> <span class="ot">[</span></span>
+<span id="cb9-10"><a href="#cb9-10" aria-hidden="true" tabindex="-1"></a>    <span class="fu">{</span><span class="dt">&quot;file&quot;</span><span class="fu">:</span> <span class="st">&quot;2026-04-11-minibar.txt&quot;</span><span class="fu">,</span> <span class="dt">&quot;reason&quot;</span><span class="fu">:</span> <span class="st">&quot;not reimbursable&quot;</span><span class="fu">}</span></span>
+<span id="cb9-11"><a href="#cb9-11" aria-hidden="true" tabindex="-1"></a>  <span class="ot">]</span></span>
+<span id="cb9-12"><a href="#cb9-12" aria-hidden="true" tabindex="-1"></a><span class="fu">}</span></span></code></pre></div>
+<p>Kern-Idee: <strong>die Message-History ist der eigentliche
+Agent-State.</strong> Alles, was der Agent “weiß”, steckt in diesen
+Messages. Wenn man die ins JSON packt, kann man den Agent später an
+derselben Stelle fortsetzen, an der er aufgehört hat.</p>
+<h3 id="der-trick-beim-resume">Der Trick beim Resume</h3>
+<div class="sourceCode" id="cb10"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> <span class="op">(</span>a <span class="op">*</span>Agent<span class="op">)</span> initialState<span class="op">(</span>ctx context<span class="op">.</span>Context<span class="op">,</span> userInput <span class="dt">string</span><span class="op">)</span> <span class="op">([]*</span>schema<span class="op">.</span>Message<span class="op">,</span> <span class="dt">int</span><span class="op">,</span> <span class="dt">error</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> a<span class="op">.</span>store <span class="op">==</span> <span class="ot">nil</span> <span class="op">{</span></span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> freshMessages<span class="op">(</span>userInput<span class="op">),</span> <span class="dv">0</span><span class="op">,</span> <span class="ot">nil</span></span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a>    prev<span class="op">,</span> err <span class="op">:=</span> a<span class="op">.</span>store<span class="op">.</span>Resume<span class="op">(</span>ctx<span class="op">,</span> a<span class="op">.</span>threadID<span class="op">)</span></span>
+<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> err <span class="op">!=</span> <span class="ot">nil</span> <span class="op">{</span></span>
+<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="ot">nil</span><span class="op">,</span> <span class="dv">0</span><span class="op">,</span> err</span>
+<span id="cb10-9"><a href="#cb10-9" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb10-10"><a href="#cb10-10" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> prev <span class="op">==</span> <span class="ot">nil</span> <span class="op">{</span></span>
+<span id="cb10-11"><a href="#cb10-11" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> freshMessages<span class="op">(</span>userInput<span class="op">),</span> <span class="dv">0</span><span class="op">,</span> <span class="ot">nil</span></span>
+<span id="cb10-12"><a href="#cb10-12" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb10-13"><a href="#cb10-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-14"><a href="#cb10-14" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Restore: messages, approved receipts, flagged issues.</span></span>
+<span id="cb10-15"><a href="#cb10-15" aria-hidden="true" tabindex="-1"></a>    a<span class="op">.</span>reg<span class="op">.</span>Restore<span class="op">(</span>prev<span class="op">.</span>Approved<span class="op">,</span> prev<span class="op">.</span>Flagged<span class="op">)</span></span>
+<span id="cb10-16"><a href="#cb10-16" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> prev<span class="op">.</span>Messages<span class="op">,</span> prev<span class="op">.</span>Step<span class="op">,</span> <span class="ot">nil</span></span>
+<span id="cb10-17"><a href="#cb10-17" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>Das ist alles. Beim Start wird geschaut, ob ein Checkpoint existiert.
+Wenn ja: Messages laden, Domain-State wiederherstellen, ab dem
+gespeicherten Step weitermachen.</p>
+<h2 id="läuft">Läuft</h2>
+<p>Erster Lauf, mit Checkpoint aktiviert:</p>
+<pre><code>% go run . -thread trip-berlin-0412
+
+==============================================
+ Expense Report Assistant — eino example
+==============================================
+ model:      gemma4:26b
+ endpoint:   http://localhost:11434/v1
+ thread id:  trip-berlin-0412
+ checkpoint: ./agentic.sqlite
+==============================================
+
+[checkpoint] new thread &quot;trip-berlin-0412&quot;
+--- iteration 1 ---
+[tool call] read_policy({})
+[checkpoint] saved step 1 (4 msgs, 0 approved, 0 flagged)
+--- iteration 2 ---
+[tool call] list_receipts({})
+[checkpoint] saved step 2 (6 msgs, 0 approved, 0 flagged)
+--- iteration 3 ---
+[tool call] read_receipt({&quot;filename&quot;:&quot;2026-04-10-lunch.txt&quot;})
+[checkpoint] saved step 3 (8 msgs, 0 approved, 0 flagged)
+--- iteration 4 ---
+[tool call] approve_receipt({&quot;amount&quot;:&quot;21.50&quot;,&quot;filename&quot;:&quot;2026-04-10-lunch.txt&quot;,...})
+[checkpoint] saved step 4 (10 msgs, 1 approved, 0 flagged)
+--- iteration 5 ---
+^C</code></pre>
+<p>An dieser Stelle drücke ich absichtlich <strong>Ctrl+C</strong>. Der
+Prozess bricht ab. Nochmal starten, gleicher Thread:</p>
+<pre><code>% go run . -thread trip-berlin-0412
+
+[checkpoint] resuming thread &quot;trip-berlin-0412&quot; at step 4
+--- iteration 5 ---
+[tool call] read_receipt({&quot;filename&quot;:&quot;2026-04-11-dinner.txt&quot;})
+...</code></pre>
+<p>Der Agent macht <strong>exakt da weiter</strong>, wo er unterbrochen
+wurde. Nicht von vorne. Die bereits approveten Belege sind im State, die
+Policy hat er nicht nochmal gelesen (weil in der Message-History schon
+drin), er geht direkt zum nächsten Beleg.</p>
+<h3 id="die-finale-abrechnung">Die finale Abrechnung</h3>
+<p>Nach allen Iterationen kommt der hardcoded Approval-Gate — das Muster
+1, auf das wirklich Verlass ist:</p>
+<pre><code>================================================
+ APPROVAL REQUIRED: submit expense report
+================================================
+ Approved for reimbursement:
+   2026-04-10-lunch.txt           21.50 EUR  (lunch within limit)
+   2026-04-11-dinner.txt          87.00 EUR  (Client dinner; one drink allowed. Removed Grappa (8.50 EUR). Total 95.50 - 8.50 = 87.00.)
+   2026-04-11-taxi.txt            14.80 EUR  (Taxi after 23:00 is reimbursable)
+   2026-04-12-hotel.txt          402.00 EUR  (Rate exceeds 180 EUR limit. Approved 180 EUR per night + breakfast)
+ TOTAL                           525.30 EUR
+
+ Flagged (not reimbursed):
+   2026-04-11-minibar.txt         Minibar items are not reimbursable
+================================================
+ Submit this report? [y/N]: y</code></pre>
+<h2 id="der-interessanteste-moment">Der interessanteste Moment</h2>
+<p>Der eigentliche Aha-Moment kam beim Vergleich zweier Läufe.
+<strong>Erster Durchlauf, ohne Unterbrechung:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Position</th>
+<th>Ergebnis</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Dinner</td>
+<td>75,00 € (“included 1 drink”)</td>
+</tr>
+<tr>
+<td>Hotel</td>
+<td>komplett geflaggt</td>
+</tr>
+<tr>
+<td><strong>Total</strong></td>
+<td><strong>111,30 €</strong></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Zweiter Durchlauf, mit Resume nach
+Unterbrechung:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Position</th>
+<th>Ergebnis</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Dinner</td>
+<td>87,00 € (“95.50 - 8.50 Grappa = 87.00”)</td>
+</tr>
+<tr>
+<td>Hotel</td>
+<td>402,00 € approved (180×2 + 42 Frühstück)</td>
+</tr>
+<tr>
+<td><strong>Total</strong></td>
+<td><strong>525,30 €</strong></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Gleicher Code, gleiche Eingabe, gleicher System-Prompt. Zwei
+völlig verschiedene Ergebnisse.</strong> Beide sind plausibel, aber der
+zweite Lauf ist deutlich besser: Die Rechnung beim Dinner ist
+transparent (exakte Zahlen), das Hotel wird nicht komplett abgelehnt
+sondern bis zum Limit anerkannt.</p>
+<p>Warum? Zwei Effekte wahrscheinlich:</p>
+<ol type="1">
+<li><strong>Die Message-History im Checkpoint</strong> enthält die
+bereits gemachten Entscheidungen und deren Begründungen. Das Modell hat
+einen konsistenteren Entscheidungsrahmen als bei einem frischen
+Start.</li>
+<li><strong>LLMs sind nicht deterministisch.</strong> Bei jedem Lauf
+kann eine andere Entscheidung fallen.</li>
+</ol>
+<p>Das ist <strong>ein weiterer Grund für hardcoded
+Approval-Gates.</strong> Man kann nicht darauf bauen, dass das Modell
+heute so entscheidet wie gestern.</p>
+<h2 id="was-dabei-rausgekommen-ist">Was dabei rausgekommen ist</h2>
+<table>
+<thead>
+<tr>
+<th>Feature</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Tool-Calling-Loop mit Eino</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>Human-Approval (hardcoded Gate)</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>LLM-fragt-aktiv (<code>ask_human</code>)</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>Checkpointing pro Step</td>
+<td>✅ (SQLite)</td>
+</tr>
+<tr>
+<td>Resume nach Crash</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>Thread-Listung</td>
+<td>✅ (<code>-list</code>)</td>
+</tr>
+</tbody>
+</table>
+<p>Das ist mehr, als man in vielen Tutorials an einem Stück sieht. Und
+es ist überschaubarer Go-Code: der Loop selbst sind ~40 Zeilen, die
+Checkpoint- Logik nochmal ~80, der Rest sind Tools und Glue.</p>
+<h2 id="fazit">Fazit</h2>
+<p><strong>Eino ist die Antwort der Go-Community auf LangGraph.</strong>
+Während die Python-Welt mit LangChain/LangGraph oft als “schnell was
+zusammenstecken” wahrgenommen wird, ist Eino für Entwickler gedacht, die
+agentische Workflows direkt in performante Go-Services integrieren
+wollen — wo Typsicherheit, Nebenläufigkeit und ein schlanker
+Dependency-Footprint zählen.</p>
+<p>Aber: Ein Framework ist kein Zauberstab.</p>
+<ul>
+<li><strong>Es löst keine Probleme, die ein <code>for</code>-Loop
+löst.</strong> Für lineare Workflows (E-Mail schreiben, einzelner
+RAG-Call) ist das overkill.</li>
+<li><strong>Es ersetzt keine Policy-Entscheidungen.</strong> Ob
+<code>send_email</code> Approval braucht, musst du hardcodieren. Das
+Framework hilft dir nur beim Plumbing.</li>
+<li><strong>Es repariert kein schlechtes Modell-Verhalten.</strong> Wenn
+Gemma zu selten nach <code>ask_human</code> greift, ist das keine
+Framework-Frage.</li>
+</ul>
+<p>Was es dir wirklich gibt:</p>
+<ul>
+<li><strong>Tool-Binding:</strong> Schemas an das Modell hängen,
+Tool-Calls parsen.</li>
+<li><strong>Message-Handling:</strong> Die Konversationshistorie
+pflegen.</li>
+<li><strong>Streaming und Callbacks:</strong> Falls du das
+brauchst.</li>
+<li><strong>Checkpointing-Hooks:</strong> Die
+State-Persistenz-Schnittstelle.</li>
+</ul>
+<p>Das ist solides Plumbing, keine Magie. Und manchmal ist genau das,
+was man braucht.</p>
+<hr />
+<p><strong>Code:</strong> Das komplette Beispiel liegt in unserem
+Examples-Repo unter <code>examples/agentic</code>.</p>
+<p><strong>Getestet mit:</strong> - <code>gemma4:26b</code> via Ollama
+(reliable, manchmal overconfident) - <code>qwen3</code> als Vergleich
+(fragt häufiger nach)</p>
+<p><strong>Verwendete Pakete:</strong> -
+<code>github.com/cloudwego/eino v0.8.9</code> -
+<code>github.com/cloudwego/eino-ext/components/model/openai v0.1.13</code>
+- <code>modernc.org/sqlite</code> (pure-Go SQLite, kein CGO nötig)</p>
+
+    <div class="post-footer">
+      <a href="/blog/">← Zurück zur Übersicht</a>
+      <span>© 2026 Frank &amp; Tristan von Schrenk</span>
+    </div>
+  </article>
+</div>
+
+<footer class="site">
+  <div class="wrap">
+    <div>© 2026 Frank &amp; Tristan von Schrenk · onisin OS ist source-available.</div>
+    <div>
+      <a href="https://docs.onisin.com">Docs</a>
+      &nbsp;·&nbsp;
+      <a href="https://docs.onisin.com/license.html">License</a>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

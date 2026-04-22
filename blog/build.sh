@@ -55,11 +55,34 @@ for md in "$POSTS_DIR"/*.md; do
   slug="$(basename "$md" .md)"
   out="$OUT_DIR/$slug.html"
 
-  # Extract front matter values using pandoc itself. This is more
-  # robust than shell parsing and honours pandoc's own YAML rules.
-  title="$(pandoc --template='$title$' "$md")"
-  date="$(pandoc --template='$date$' "$md")"
-  description="$(pandoc --template='$description$' "$md")"
+  # Extract a single YAML front matter field from a Markdown file.
+  # Reads only the first `---`-delimited block at the top of the
+  # file, strips optional surrounding quotes, and prints the value.
+  # Robust enough for our schema (title, date, description) without
+  # pulling in a YAML parser.
+  read_fm() {
+    local file="$1" key="$2"
+    awk -v key="$key" '
+      BEGIN          { in_fm = 0 }
+      NR == 1 && /^---[[:space:]]*$/ { in_fm = 1; next }
+      in_fm && /^---[[:space:]]*$/   { exit }
+      in_fm {
+        # Match "key: value" at the start of the line.
+        if (match($0, "^" key "[[:space:]]*:[[:space:]]*")) {
+          val = substr($0, RLENGTH + 1)
+          # Strip surrounding single or double quotes.
+          sub(/^"/, "", val); sub(/"$/, "", val)
+          sub(/^\x27/, "", val); sub(/\x27$/, "", val)
+          print val
+          exit
+        }
+      }
+    ' "$file"
+  }
+
+  title="$(read_fm "$md" title)"
+  date="$(read_fm "$md" date)"
+  description="$(read_fm "$md" description)"
 
   if [[ -z "$title" || -z "$date" ]]; then
     echo "Skipping $md: missing title or date in front matter" >&2
