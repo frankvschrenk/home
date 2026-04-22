@@ -2,7 +2,15 @@
 title: "Eino vs. LangGraph — oder: wann braucht man eigentlich ein Agent-Framework?"
 date: 2026-04-22
 description: "Jede Woche ein neues Agent-Framework. Lohnt sich das wirklich, oder reicht ein for-Loop? Eine Analyse mit lauffähigem Go-Beispiel — Spesenprüfer mit Eino, Human-in-the-Loop, Checkpointing und Resume nach Crash."
+series: "LLM-Systeme in der Praxis"
+series_index: 3
 ---
+
+> **Teil 3 der Serie *LLM-Systeme in der Praxis*.** Drei Posts, die aufeinander
+> aufbauen:
+> 1. [Event-basierte Daten](./2026-04-22-event-basierte-daten.md) — wie landen Daten im System?
+> 2. [Embeddings und RAG](./2026-04-22-embeddings-und-rag.md) — wie werden sie durchsuchbar?
+> 3. **Eino vs. LangGraph** *(dieser Post)* — wie nutzt ein Agent das alles?
 
 Jede Woche ein neues Framework, jede Woche ein neues Buzzword. LangGraph, Eino,
 AutoGen, CrewAI, LangChain, MLflow... Irgendwann wird man müde davon und
@@ -534,3 +542,11 @@ braucht.
 - `github.com/cloudwego/eino v0.8.9`
 - `github.com/cloudwego/eino-ext/components/model/openai v0.1.13`
 - `modernc.org/sqlite` (pure-Go SQLite, kein CGO nötig)
+
+---
+
+**Zurück in der Serie:**
+[← Teil 2 — Embeddings und RAG](./2026-04-22-embeddings-und-rag.md)
+
+**Zum Start der Serie:**
+[Teil 1 — Event-basierte Daten](./2026-04-22-event-basierte-daten.md)

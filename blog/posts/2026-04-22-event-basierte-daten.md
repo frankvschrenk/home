@@ -2,7 +2,15 @@
 title: "Event-basierte Daten — oder warum wir bei PostgreSQL geblieben sind"
 date: 2026-04-22
 description: "Event Sourcing, CQRS, Change Data Capture, Kafka, EventStoreDB, ArangoDB, SurrealDB — jede Woche ein neuer Event-Store. Eine nüchterne Einordnung für Architekten und CTOs, warum PostgreSQL mit pgvector oft die bessere Wahl ist als die schicke spezialisierte DB."
+series: "LLM-Systeme in der Praxis"
+series_index: 1
 ---
+
+> **Teil 1 der Serie *LLM-Systeme in der Praxis*.** Drei Posts, die aufeinander
+> aufbauen:
+> 1. **Event-basierte Daten** *(dieser Post)* — wie landen Daten im System?
+> 2. [Embeddings und RAG](./2026-04-22-embeddings-und-rag.md) — wie werden sie durchsuchbar?
+> 3. [Eino vs. LangGraph](./2026-04-22-eino-vs-langgraph.md) — wie nutzt ein Agent das alles?
 
 *Event Sourcing*, *Event-Driven Architecture*, *CQRS*, *Change Data Capture*,
 *Event Streams*, *Kafka*, *EventStoreDB* — in Architektur-Meetings fallen
@@ -80,6 +88,84 @@ vorher Kategorien anlegen zu müssen.
 
 Das letzte Argument ist für uns bei OOS der entscheidende gewesen. Dazu
 unten mehr.
+
+## Was passiert da eigentlich hinter den Kulissen?
+
+An dieser Stelle lohnt ein kurzer Blick auf den Ablauf, denn das Zusammenspiel
+von Event-Tabelle, Embedding-Modell und Vector-Store verwirrt beim ersten
+Kontakt regelmäßig. Das hier ist der ganze Prozess in drei Schritten:
+
+```
+┌─────────────────────────┐
+│  1. Event entsteht      │   INSERT INTO events (text, ...)
+│                         │   VALUES ('VPN broken since
+│                         │    Windows update...')
+└───────────┬─────────────┘
+            │
+            │  Trigger / LISTEN/NOTIFY
+            ▼
+┌─────────────────────────┐
+│  2. Embedding-Modell    │   granite-embedding, nomic, ada-002 o.ä.
+│     verwandelt Text     │   → Vektor aus ~384–1536 Zahlen
+│     in Zahlen           │   [0.12, -0.88, 0.43, ..., 0.07]
+└───────────┬─────────────┘
+            │
+            ▼
+┌─────────────────────────┐
+│  3. Vector-Store        │   INSERT INTO embeddings
+│     (pgvector-Tabelle)  │     (source_id, embedding)
+│                         │   → später per Ähnlichkeits-
+│                         │     suche abfragbar
+└─────────────────────────┘
+
+            ...später, zur Abfragezeit...
+
+┌─────────────────────────┐
+│  4. User stellt Frage   │   "Gab es Probleme nach
+│                         │    Windows-Updates?"
+└───────────┬─────────────┘
+            │
+            │  dieselbe Embedding-Funktion
+            ▼
+┌─────────────────────────┐
+│  5. Query-Vektor         │   → Top-K ähnlichste Event-
+│     vs. gespeicherte    │     Vektoren zurück
+│     Event-Vektoren      │
+└───────────┬─────────────┘
+            │
+            ▼
+┌─────────────────────────┐
+│  6. Großes LLM          │   bekommt die gefundenen
+│     bekommt Frage +     │   Events als Kontext und
+│     Treffer als Kontext │   formuliert die Antwort
+└─────────────────────────┘
+```
+
+Die Frage, die sich dabei fast jeder zuerst stellt: *warum nicht einfach
+den Text nehmen? Warum dieser Umweg über Zahlen?*
+
+Kurz und ohne Mathe: LLMs und Embedding-Modelle arbeiten intern nicht mit
+Buchstaben, sondern mit hochdimensionalen Zahlenmatrizen. Ein Embedding ist
+nichts anderes als die Koordinaten, die ein Text in diesem Zahlenraum
+bekommt. Texte mit **ähnlicher Bedeutung** liegen dort geometrisch nah
+beieinander — auch wenn sie keine Wörter gemeinsam haben.
+
+Beispiel: Die Sätze
+
+- *"VPN connection broken since the latest Windows update."*
+- *"Nach dem letzten Patch kommen viele User nicht mehr ins Firmennetz."*
+
+haben kein einziges gemeinsames Wort. Volltext-Suche findet hier gar nichts.
+Die Embeddings dieser beiden Sätze liegen aber geometrisch dicht beieinander,
+weil sie *semantisch* das Gleiche bedeuten. Genau das macht Vektor-Suche so
+mächtig — und genau deswegen lohnt sich der Umweg über die Zahlen.
+
+Dieses Muster — *relevante Inhalte per Vektor finden, dann einem LLM als
+Kontext mitgeben* — heißt **Retrieval-Augmented Generation** (RAG) und ist
+inzwischen der Standard-Weg, um große Sprachmodelle mit firmenspezifischem
+Wissen zu verbinden, ohne sie neu zu trainieren. Warum genau der Umweg über
+Vektoren funktioniert, und wo RAG an seine Grenzen stößt, steht im nächsten
+Teil der Serie: [Embeddings und RAG verständlich erklärt](./2026-04-22-embeddings-und-rag.md).
 
 ## Die Landschaft der Event-Stores
 
@@ -288,3 +374,8 @@ Die technischen Details und der Go-Code hinter der Event-Mapping-Schicht
 sind in unserer Doku beschrieben. Für die Architekturdiskussion im eigenen
 Team ist die Code-Ebene allerdings meist weniger relevant als die Fragen
 oben.
+
+---
+
+**Weiter in der Serie:**
+[Teil 2 — Embeddings und RAG verständlich erklärt →](./2026-04-22-embeddings-und-rag.md)
