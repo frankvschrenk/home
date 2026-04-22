@@ -8,9 +8,9 @@ series_index: 2
 
 > **Teil 2 der Serie *LLM-Systeme in der Praxis*.** Drei Posts, die aufeinander
 > aufbauen:
-> 1. [Event-basierte Daten](./2026-04-22-event-basierte-daten.html) — wie landen Daten im System?
+> 1. [Event-basierte Daten](../2026-04-22-event-basierte-daten/) — wie landen Daten im System?
 > 2. **Embeddings und RAG** *(dieser Post)* — wie werden sie durchsuchbar?
-> 3. [Eino vs. LangGraph](./2026-04-22-eino-vs-langgraph.html) — wie nutzt ein Agent das alles?
+> 3. [Eino vs. LangGraph](../2026-04-22-eino-vs-langgraph/) — wie nutzt ein Agent das alles?
 
 Im vorherigen Post über Event-basierte Daten kam eine Frage vor, die ich in
 Gesprächen immer wieder gestellt bekomme: **Warum verwandelt man einen Satz
@@ -330,7 +330,7 @@ vergleichen. Nichts klärt schneller als 20 Zeilen Python oder Go.
 ---
 
 **Zurück in der Serie:**
-[← Teil 1 — Event-basierte Daten](./2026-04-22-event-basierte-daten.html)
+[← Teil 1 — Event-basierte Daten](../2026-04-22-event-basierte-daten/)
 
 **Weiter in der Serie:**
-[Teil 3 — Eino vs. LangGraph →](./2026-04-22-eino-vs-langgraph.html)
+[Teil 3 — Eino vs. LangGraph →](../2026-04-22-eino-vs-langgraph/)

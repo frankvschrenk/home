@@ -2,9 +2,17 @@
 #
 # build.sh — render the onisin OS blog.
 #
-# Reads every Markdown file in posts/ and produces a matching HTML
-# file under articles/. Each post must start with a YAML front matter
-# block like this:
+# Reads every Markdown file in posts/ and produces matching HTML
+# output under articles/. Each post is rendered twice for
+# convenience:
+#
+#   articles/<slug>.html          — classic, stable URL
+#   articles/<slug>/index.html    — pretty URL (/articles/<slug>/)
+#
+# Both files have identical content. Existing links to the .html
+# form keep working; new links use the pretty form.
+#
+# Each post must start with a YAML front matter block like this:
 #
 #     ---
 #     title: "Warum wir kein Framework nutzen"
@@ -103,6 +111,14 @@ for md in "$POSTS_DIR"/*.md; do
     --metadata=date-human:"$date_human" \
     --output="$out"
 
+  # Mirror the rendered HTML into articles/<slug>/index.html so the
+  # blog also serves pretty URLs like /articles/<slug>/ — GitHub
+  # Pages auto-serves index.html from a folder. The .html form
+  # above stays for backward compatibility.
+  pretty_dir="$OUT_DIR/$slug"
+  mkdir -p "$pretty_dir"
+  cp "$out" "$pretty_dir/index.html"
+
   echo "  rendered  $slug"
   printf '%s|%s|%s|%s\n' "$date" "$slug" "$title" "$description" >> "$MANIFEST"
   post_count=$((post_count + 1))
@@ -183,7 +199,7 @@ HTML_EMPTY
       )"
       cat <<HTML_ITEM
     <li>
-      <a class="post-link" href="articles/$slug.html">
+      <a class="post-link" href="articles/$slug/">
         <div class="post-meta">$date_human</div>
         <h2>$title</h2>
         <p class="teaser">$description</p>
