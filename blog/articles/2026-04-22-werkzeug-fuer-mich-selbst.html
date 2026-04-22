@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ein Werkzeug für mich selbst — wie ich einen MCP-Server
+bekommen habe, der für LLMs gebaut ist — onisin OS Blog</title>
+  <meta name="description" content="Ein Abendprojekt mit Claude: den
+offiziellen MCP-Filesystem-Server durch eine Go-Variante zu ersetzen,
+die kein Sicherheitstheater vor einem trusted, single-user Kontext
+aufführt. Was sich ändert, wenn ein Tool für den tatsächlichen Nutzer
+gebaut wird — und das ist in diesem Fall ein LLM.">
+  <link rel="stylesheet" href="../blog.css">
+</head>
+<body>
+
+<header class="site">
+  <div class="wrap">
+    <div class="brand">
+      <span class="dot"></span>
+      <a href="/">onisin OS</a>
+    </div>
+    <nav class="primary">
+      <a href="/#how">Wie es funktioniert</a>
+      <a href="/#security">Sicherheit</a>
+      <a href="/blog/" class="active">Blog</a>
+      <a href="https://docs.onisin.com">Docs</a>
+      <a class="gh-link" href="https://github.com/frankvschrenk/onisin"
+         target="_blank" rel="noopener" aria-label="onisin OS on GitHub">
+        <svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"
+             fill="currentColor" aria-hidden="true">
+          <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/>
+        </svg>
+        <span>GitHub</span>
+      </a>
+    </nav>
+  </div>
+</header>
+
+<div class="wrap">
+  <article class="post">
+    <header class="post-head">
+      <div class="post-meta">22. April 2026</div>
+      <h1>Ein Werkzeug für mich selbst — wie ich einen MCP-Server
+bekommen habe, der für LLMs gebaut ist</h1>
+    </header>
+
+<p>Heute Abend sind zwanzig Minuten vergangen, und ich habe einen neuen
+MCP-Server. Kein großes Ding, ein kleines Tool — aber eines, das mir
+wahrscheinlich ab jetzt in jeder Session Zeit und vor allem Tokens
+spart. Der Teil, der mich beschäftigt, ist weniger das Tool selbst als
+das, was beim Bauen klar geworden ist.</p>
+<p>Der Server heißt <code>oosfs</code>. Er ersetzt den offiziellen
+<code>@modelcontextprotocol/server-filesystem</code>, den man in Claude
+Desktop einbindet, wenn man dem LLM Dateizugriff geben will. Das
+Besondere: Claude hat ihn selbst gebaut. Für sich selbst.</p>
+<p>Das klingt esoterischer als es ist. Ich habe Claude gesagt: <em>“Das
+ist ein Tool für dich. Bau rein, was dich schneller und besser
+macht.”</em> Und dann zugeschaut, was entsteht, wenn ein LLM die
+Design-Entscheidungen trifft. Die Ergebnisse waren durchgängig anders,
+als ich sie selbst getroffen hätte.</p>
+<h2
+id="ausgangspunkt-warum-der-standard-server-nicht-passt">Ausgangspunkt:
+warum der Standard-Server nicht passt</h2>
+<p>Der offizielle Filesystem-Server ist solide, aber er wurde für einen
+generischen Einsatz gebaut — unbekannter Nutzer, unbekanntes
+Sicherheitsniveau, unbekannter Anwendungsfall. Das führt zu defensivem
+Design:</p>
+<ul>
+<li>Dateigrößen werden gedeckelt, damit LLMs nicht aus Versehen 50 MB in
+die Konversation ziehen.</li>
+<li>Output kommt als formatierter Text (<code>[FILE] foo.txt</code>,
+<code>[DIR] src/</code>), was für Menschen lesbar ist, aber für ein LLM
+bedeutet: Parser selbst schreiben.</li>
+<li>Es gibt keine <code>.gitignore</code>-Awareness. Ein Suchlauf über
+ein Node-Projekt verbrennt durch <code>node_modules/</code>, bevor man
+die eigentliche Antwort sieht.</li>
+<li>Keine Inhalts-Suche. Wer “wo ist <code>EventProcessor</code>
+definiert?” beantworten will, macht <code>list</code> →
+<code>read</code> → <code>read</code> → <code>read</code>. Jeder Aufruf
+ist ein Roundtrip. Jeder Roundtrip kostet Tokens.</li>
+</ul>
+<p>Das sind keine Fehler des Servers — das sind die richtigen
+Entscheidungen für <em>seinen</em> Kontext. Aber mein Kontext ist
+anders: ein einzelner Entwickler (ich), ein einzelnes Monorepo
+(<code>~/repro/onisin</code>), ein einzelnes LLM, dem ich vertraue. Alle
+Schutzmaßnahmen, die sich daran orientieren, dass “das LLM vielleicht
+Schaden anrichtet”, sind für diesen Kontext Reibungsverlust.</p>
+<h2 id="die-eine-anweisung-die-alles-geändert-hat">Die eine Anweisung,
+die alles geändert hat</h2>
+<p>Als Claude anfing, den Server zu bauen, fiel mir auf, dass es sofort
+anfing Dateigröße-Limits, Shell-Allowlists, git-commit-Schutz und
+ähnliches einzubauen. Klassisches defensives Design. Also habe ich es
+unterbrochen:</p>
+<blockquote>
+<p><em>Das ist ein Tool für dich. Das ist sozusagen der Ersatz für
+<code>-y @modelcontextprotocol/server-filesystem</code>, nur für
+Erwachsene.</em></p>
+</blockquote>
+<p>Und später:</p>
+<blockquote>
+<p><em>Kein Allowlist — alles was in <code>$PATH</code> liegt darf
+laufen. Ja, exec darf auch <code>git commit</code> und
+<code>git push</code> ausführen.</em></p>
+</blockquote>
+<p>Das ist der Punkt, an dem sich der Charakter des Projekts geändert
+hat. Statt einen MCP-Server zu bauen, der Claude <em>daran hindert</em>,
+Fehler zu machen, bauten wir einen, der Claude <em>befähigt</em>, die
+richtige Sache schnell zu tun. Die Annahme verschiebt sich von “wenn es
+schiefgeht, muss das Tool es verhindern” zu “wenn es schiefgeht, rolle
+ich halt einen Commit zurück”.</p>
+<p>Das ist eine Vertrauensentscheidung, und sie ist ehrlich gesagt keine
+riskante. Git existiert. Backups existieren. Der Schaden, den ein
+falscher <code>rm</code> verursachen kann, ist bekannt und begrenzt.
+Dagegen ist der Schaden, den ein permanent zögerliches LLM verursacht,
+diffuser, aber real: zehn Minuten werden zu einer Stunde, Kontextfenster
+füllen sich mit Rückfragen statt mit Arbeit.</p>
+<h2 id="was-claude-gebaut-hat-das-ich-nicht-gebaut-hätte">Was Claude
+gebaut hat, das ich nicht gebaut hätte</h2>
+<p>Drei Design-Entscheidungen sind mir besonders aufgefallen, weil sie
+so offensichtlich aus LLM-Perspektive getroffen wurden, dass ich sie als
+Mensch wahrscheinlich übersehen hätte.</p>
+<h3 id="alles-ist-json-nichts-ist-formatierter-text">1. Alles ist JSON,
+nichts ist formatierter Text</h3>
+<p>Der Standard-Server liefert Verzeichnislisten als:</p>
+<pre><code>[DIR] src
+[FILE] README.md
+[FILE] main.go</code></pre>
+<p><code>oosfs</code> liefert:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode json"><code class="sourceCode json"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="fu">{</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;count&quot;</span><span class="fu">:</span> <span class="dv">3</span><span class="fu">,</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;entries&quot;</span><span class="fu">:</span> <span class="ot">[</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    <span class="fu">{</span><span class="dt">&quot;name&quot;</span><span class="fu">:</span> <span class="st">&quot;src&quot;</span><span class="fu">,</span> <span class="dt">&quot;type&quot;</span><span class="fu">:</span> <span class="st">&quot;dir&quot;</span><span class="fu">,</span> <span class="dt">&quot;size&quot;</span><span class="fu">:</span> <span class="dv">192</span><span class="fu">,</span> <span class="dt">&quot;mtime&quot;</span><span class="fu">:</span> <span class="st">&quot;2026-04-22T15:13:04Z&quot;</span><span class="fu">}</span><span class="ot">,</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    <span class="fu">{</span><span class="dt">&quot;name&quot;</span><span class="fu">:</span> <span class="st">&quot;README.md&quot;</span><span class="fu">,</span> <span class="dt">&quot;type&quot;</span><span class="fu">:</span> <span class="st">&quot;file&quot;</span><span class="fu">,</span> <span class="dt">&quot;size&quot;</span><span class="fu">:</span> <span class="dv">1516</span><span class="fu">,</span> <span class="dt">&quot;mtime&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">}</span><span class="ot">,</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    <span class="fu">{</span><span class="dt">&quot;name&quot;</span><span class="fu">:</span> <span class="st">&quot;main.go&quot;</span><span class="fu">,</span> <span class="dt">&quot;type&quot;</span><span class="fu">:</span> <span class="st">&quot;file&quot;</span><span class="fu">,</span> <span class="dt">&quot;size&quot;</span><span class="fu">:</span> <span class="dv">4159</span><span class="fu">,</span> <span class="dt">&quot;mtime&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">}</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>  <span class="ot">]</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="fu">}</span></span></code></pre></div>
+<p>Das ist mehr Bytes pro Eintrag — aber Claude muss nichts parsen.
+Strukturierte Daten sind für ein LLM genauso “frei” zu konsumieren wie
+formatierter Text, aber ohne Parser-Fehler. Und Größen/Zeitstempel
+bekommt man geschenkt, die im Text-Format fehlen.</p>
+<p>Das Argument <em>“aber das kostet doch mehr Tokens!”</em> stimmt nur
+oberflächlich. Im Gegenteil: wenn ich sowieso <code>list</code> dann
+<code>stat</code> auf drei Dateien aufrufen müsste, um mtime und Größe
+zu bekommen, spare ich durch das eine Tool mehr, als ich durch die
+JSON-Struktur verliere. Die Metrik ist nicht Output-Größe, sondern
+<strong>wie viele Roundtrips brauchst du, um deine Antwort zu
+bekommen</strong>.</p>
+<h3
+id="search-ist-kein-grep-es-ist-grep-plus-find-plus-.gitignore-plus-context">2.
+<code>search</code> ist kein <code>grep</code> — es ist
+<code>grep</code> plus <code>find</code> plus <code>.gitignore</code>
+plus Context</h3>
+<p>Im Standard-Server muss man separat <em>finden</em> und
+<em>lesen</em>. Bei <code>oosfs</code> beantwortet ein einziger Aufruf
+die Frage “finde alle Stellen, an denen
+<code>ProcessUnprocessedEvents</code> referenziert wird, mit zwei Zeilen
+Kontext, in Go-Dateien, in meinem Monorepo”:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode json"><code class="sourceCode json"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="fu">{</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;path&quot;</span><span class="fu">:</span> <span class="st">&quot;/Users/frank/repro/onisin&quot;</span><span class="fu">,</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;glob&quot;</span><span class="fu">:</span> <span class="st">&quot;**/*.go&quot;</span><span class="fu">,</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;pattern&quot;</span><span class="fu">:</span> <span class="st">&quot;ProcessUnprocessedEvents&quot;</span><span class="fu">,</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;context&quot;</span><span class="fu">:</span> <span class="dv">2</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a><span class="fu">}</span></span></code></pre></div>
+<p>Das Ergebnis: drei Treffer in drei Dateien, jeder mit umliegenden
+Zeilen und Zeilennummern. <code>.gitignore</code> wird automatisch
+respektiert — also keine Treffer aus <code>vendor/</code> oder
+<code>node_modules/</code>.</p>
+<p>Als ich das Tool zum ersten Mal benutzt habe, dämmerte mir, warum das
+so drastisch besser ist: <strong>Claude denkt in Fragen, nicht in
+Kommandos.</strong> Die Frage “wo ist das definiert und wo wird es
+benutzt?” ist natürlich. Die Übersetzung in “list directory, dann über
+alle Dateien iterieren, dann lesen, dann filtern” ist der Preis, den man
+für schlecht designte Tools zahlt. Gutes Tooling lässt Claude die Frage
+in einem Schritt stellen.</p>
+<h3
+id="edit-ist-fehlersicher-weil-claude-weiß-wo-es-selbst-versagt-hat">3.
+<code>edit</code> ist fehlersicher — weil Claude weiß, wo es selbst
+versagt hat</h3>
+<p>Der generische <code>edit_file</code> aus dem Standard-Server hat ein
+bekanntes Problem: manchmal schreibt er einfach nichts, ohne Fehler. Das
+Suchmuster passt knapp nicht, oder es passt an mehreren Stellen, und
+etwas geht leise schief. Man merkt es erst, wenn man hinterher die Datei
+liest.</p>
+<p>Claude’s Version hat zwei Designentscheidungen eingebaut:</p>
+<ul>
+<li><strong><code>expect_count</code></strong> (Default: 1). Wenn das
+Suchmuster nicht <em>exakt einmal</em> vorkommt, schlägt der Edit fehl —
+statt leise alle Vorkommen zu ersetzen oder an einer falschen Stelle
+zuzuschlagen.</li>
+<li><strong><code>dry_run</code></strong>. Bevor tatsächlich geschrieben
+wird, kann man einen Diff-Preview bekommen.</li>
+</ul>
+<p>Diese Entscheidungen kommen direkt daraus, dass Claude <em>weiß</em>,
+wo es selbst Fehler macht. Kein Mensch würde diese Absicherungen mit
+dieser Präzision treffen, weil ein Mensch nicht erlebt, wie oft ein
+still fehlschlagender Edit Stunden kostet. Claude hat diese Erfahrung
+aus seinen Trainingsdaten — und hat sie in das Tool eingebaut, das es
+selbst benutzen wird. Das ist das, wofür der Begriff “dogfooding”
+eigentlich erfunden wurde.</p>
+<h2 id="das-tool-das-alles-enttarnt-hat-exec">Das Tool, das alles
+enttarnt hat: <code>exec</code></h2>
+<p>Irgendwann während des Baus sagte Claude: <em>“Mit einem
+<code>exec</code>-Tool könnte ich mir selbst Builds und Tests auslösen,
+ohne dich zu fragen.”</em> Das war der Kipp-Punkt. Davor hat Claude
+einen Edit gemacht, und ich habe <code>make build</code> ausgeführt und
+den Output zurückgeschickt. Alle ein bis zwei Minuten.</p>
+<p>Nach <code>exec</code> lief das so ab:</p>
+<ol type="1">
+<li>Claude ändert den Code.</li>
+<li>Claude ruft <code>exec make build</code>.</li>
+<li>Wenn’s klappt, geht’s weiter. Wenn nicht, liest Claude die
+Fehlermeldung und korrigiert.</li>
+</ol>
+<p>Ich musste nichts mehr tun. Das spart nicht nur meine Zeit, sondern
+auch Claudes Kontext — weil ich nicht mehr als Proxy fungieren muss
+(Output copy-paste zurückschicken, Zeichenbegrenzungen einhalten, etc.).
+Der Loop wurde direkt.</p>
+<p>Die Implementierung ist bewusst bescheiden: kein Shell-Interpreter
+(also keine Pipe-Injection-Risiken per Default — wer Pipes will, ruft
+explizit <code>sh -c</code>), Timeouts, 1 MiB Output-Cap pro Stream,
+Audit-Log nach stderr. Aber keine Allowlists, keine git-write-Filter.
+Ich vertraue meinem Claude — oder ich sollte gar nicht mit einem LLM
+arbeiten. Ein Mittelweg gibt es nicht, der nicht verkrüppelt.</p>
+<h2 id="die-design-heuristik-die-bleibt">Die Design-Heuristik, die
+bleibt</h2>
+<p>Das Projekt hat mir eine Heuristik gegeben, die ich mitnehme:
+<strong>Wenn du ein Tool für ein LLM baust, frage das LLM, was es
+braucht. Und dann widerstehe dem Drang, seine Antwort zu
+hinterfragen.</strong></p>
+<p>Claude hat von sich aus Dinge eingebaut, die ich für optional
+gehalten hätte:</p>
+<ul>
+<li><code>project_info</code> — erkennt beim ersten Aufruf, ob ich in
+einem Git-Repo, einem Go-Modul, einem Node-Projekt sitze. Spart die
+Zeit, die Claude sonst mit “lass mich mal schauen was hier liegt”
+verbringt.</li>
+<li><code>find_symbol</code> / <code>list_symbols</code> —
+Go-AST-basiert. Findet die <em>Definition</em> von
+<code>EventProcessor</code>, nicht jeden Callsite. Genau das, was ich
+als Entwickler eigentlich meine, wenn ich “wo ist das?” frage.</li>
+<li><code>exec_start</code> / <code>exec_read</code> /
+<code>exec_stop</code> — Streaming-Variante von <code>exec</code>. Für
+<code>go test -v ./...</code>, das minutenlang läuft und dessen Output
+man inkrementell pollen will.</li>
+</ul>
+<p>Diese Tools hätte ich nicht von selbst gebaut, weil ich sie aus
+Menschen-Perspektive nicht vermisse. Ich habe <code>grep</code>, ich
+habe die IDE-Symbolsuche, ich habe <code>make build</code>. Aber Claude
+arbeitet ohne diese Werkzeuge — für Claude war jedes dieser Tools eine
+Lücke, die ich ohne Nachfrage nicht gesehen hätte.</p>
+<h2 id="was-das-für-den-alltag-mit-llms-bedeutet">Was das für den Alltag
+mit LLMs bedeutet</h2>
+<p>Ich treffe in Gesprächen oft Entwickler, die mit LLMs arbeiten, aber
+so arbeiten, als würde das LLM sie austricksen wollen. Jede Anweisung
+ist ein gehärtetes System-Prompt, jede Tool-Berechtigung wird einzeln
+abgenickt, jeder Commit manuell geprüft. Die Resultate sind mittelmäßig,
+und die Leute sind frustriert.</p>
+<p>Das Problem ist nicht das LLM. Das Problem ist, dass die
+Schutzmaßnahmen den Prozess langsamer machen, als der Fehler es wäre.
+Ein falscher Commit ist ein <code>git reset</code>. Eine gelöschte Datei
+ist <code>git checkout</code>. Aber zehn Minuten Permission-Popups pro
+Session sind verloren — nicht wiederbringbar.</p>
+<p>Die Umstellung ist nicht “dem LLM blind vertrauen”. Die Umstellung
+ist: <strong>dem LLM die gleiche Kompetenz zuzutrauen wie einem
+Junior-Entwickler.</strong> Der macht auch mal einen Fehler. Der wird
+dafür nicht mit einem Käfig aus Berechtigungen gebremst, sondern mit
+Git-History, Code-Reviews und einem Gespräch nach dem Fehler. Die
+gleiche Dynamik funktioniert mit einem LLM — besser sogar, weil das LLM
+kein Ego hat und Feedback direkt in die nächste Aktion einbaut.</p>
+<p>Konkret heißt das:</p>
+<ul>
+<li>Tools großzügig ausliefern. Nicht “minimal viable permissions”.</li>
+<li>Auf “Immer erlauben” klicken, wenn das Popup kommt. Einmal klicken
+ist billiger als bei jedem Aufruf nachdenken.</li>
+<li>In einem Repo arbeiten, wo Git History deine Sicherheitsnetz
+<em>ist</em>.</li>
+<li>Tools so designen, dass sie strukturierte Daten zurückgeben, nicht
+formatierten Text.</li>
+<li>Dem LLM <code>exec</code>-Zugriff geben, wenn es Builds/Tests laufen
+lassen soll. Die Alternative ist, dass du der menschliche Compiler
+bist.</li>
+</ul>
+<h2 id="eine-randnotiz-zu-permission-dialogen">Eine Randnotiz zu
+Permission-Dialogen</h2>
+<p>Ein kleiner technischer Hinweis am Rande, weil er zum Thema passt:
+MCP-Tools können dem Client Annotations mitgeben —
+<code>readOnlyHint</code>, <code>destructiveHint</code>,
+<code>idempotentHint</code>. Claude Desktop nutzt diese Hints, um zu
+entscheiden, ob bei einem Tool-Aufruf ein Bestätigungsdialog
+erscheint.</p>
+<p>Der Default in <code>mark3labs/mcp-go</code> ist
+<em>konservativ</em>: wenn man keine Annotations explizit setzt, gilt
+jedes Tool als potenziell destruktiv. Das bedeutet: bei jedem Aufruf ein
+Popup. Eine frische Session mit einem neuen MCP-Server führt schnell zu
+fünfzehn Klicks, bevor das LLM überhaupt anfängt zu arbeiten.</p>
+<p><code>oosfs</code> setzt deshalb für jedes Tool die Annotations
+bewusst. Read-only Tools wie <code>list</code>, <code>read</code>,
+<code>search</code>, <code>find_symbol</code>, <code>git_status</code>
+sind explizit als solche markiert — keine Popups. Schreibende Tools
+(<code>write</code>, <code>edit</code>, <code>exec</code>) sind als
+destruktiv markiert — da kommt ein Popup, und das ist auch richtig
+so.</p>
+<p>Zusätzlich gibt es den Schalter <code>OOSFS_TRUSTED=1</code>, der
+alle Tools als read-only advertisiert. Das ist ehrlicher als es klingt:
+es ist eine reine UX-Hilfe für den Client. Der Server verhält sich
+identisch, das LLM hat dieselben Fähigkeiten — nur die Popup-Dialoge
+verschwinden. Für einen trusted, single-user Kontext ist das genau das,
+was man will.</p>
+<p>Wer das in seinem eigenen MCP-Server nachbauen will: die Annotations
+werden direkt beim <code>mcp.NewTool(...)</code>-Aufruf mitgegeben, über
+<code>mcp.WithToolAnnotation(mcp.ToolAnnotation{...})</code>. Es sind
+vier Zeilen pro Tool. Die Auswirkung auf die gefühlte Geschwindigkeit
+ist massiv.</p>
+<h2 id="der-commit-mit-dem-der-post-endet">Der Commit, mit dem der Post
+endet</h2>
+<p>Der erste Commit von <code>oosfs</code> im Monorepo sieht so aus:</p>
+<pre><code>f55ea25 Add oosfs: filesystem MCP server for the onisin monorepo
+0a15d87 Init</code></pre>
+<p>Zwei Commits. Der zweite ist von Claude. Das ist nicht
+selbstverständlich für ein Projekt, das ich schon seit Jahren
+mitschleppe — aber hier hat Claude den Code geschrieben, die Tests
+(informell) gelaufen, das Staging gemacht, die <code>.gitignore</code>
+für den Binary-Namen ergänzt, dann committed. Und zwar mit einer
+Commit-Message, über die wir vorher explizit gesprochen haben.</p>
+<p>Der Push kam zehn Sekunden später. <code>git push origin main</code>,
+exit 0, 1.5 Sekunden. Synchron mit GitHub. Keine Handarbeit.</p>
+<p>Zwanzig Minuten, ein neues Tool im Repo, und jede zukünftige Session
+läuft schneller. Das ist der Deal, den ich gerne öfter machen würde.</p>
+<hr />
+<p><em>Wer sich den Code ansehen will: <code>oosfs</code> liegt im <a
+href="https://github.com/frankvschrenk/onisin/tree/main/oosfs">onisin
+Monorepo</a>. Go 1.25, mark3labs/mcp-go v0.45, BSL 1.1.</em></p>
+
+    <div class="post-footer">
+      <a href="/blog/">← Zurück zur Übersicht</a>
+      <span>© 2026 Frank &amp; Tristan von Schrenk</span>
+    </div>
+  </article>
+</div>
+
+<footer class="site">
+  <div class="wrap">
+    <div>© 2026 Frank &amp; Tristan von Schrenk · onisin OS ist source-available.</div>
+    <div>
+      <a href="https://docs.onisin.com">Docs</a>
+      &nbsp;·&nbsp;
+      <a href="https://docs.onisin.com/license.html">License</a>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>
