@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Warum Zahlen statt Texte? Embeddings und RAG verständlich
+erklärt — onisin OS Blog</title>
+  <meta name="description" content="Warum verwandelt man Texte in
+Zahlen, bevor man sie durchsucht? Warum versteht Volltext-Suche keine
+Synonyme, und was macht ein LLM eigentlich anders? Eine Erklärung ohne
+Mathe, aber mit genug Tiefe, um Kolleg:innen und Kunden überzeugen zu
+können.">
+  <link rel="stylesheet" href="../blog.css">
+</head>
+<body>
+
+<header class="site">
+  <div class="wrap">
+    <div class="brand">
+      <span class="dot"></span>
+      <a href="/">onisin OS</a>
+    </div>
+    <nav class="primary">
+      <a href="/#how">Wie es funktioniert</a>
+      <a href="/#security">Sicherheit</a>
+      <a href="/blog/" class="active">Blog</a>
+      <a href="https://docs.onisin.com">Docs</a>
+      <a class="gh-link" href="https://github.com/frankvschrenk/onisin"
+         target="_blank" rel="noopener" aria-label="onisin OS on GitHub">
+        <svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"
+             fill="currentColor" aria-hidden="true">
+          <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/>
+        </svg>
+        <span>GitHub</span>
+      </a>
+    </nav>
+  </div>
+</header>
+
+<div class="wrap">
+  <article class="post">
+    <header class="post-head">
+      <div class="post-meta">22. April 2026</div>
+      <h1>Warum Zahlen statt Texte? Embeddings und RAG verständlich
+erklärt</h1>
+    </header>
+
+<blockquote>
+<p><strong>Teil 2 der Serie <em>LLM-Systeme in der Praxis</em>.</strong>
+Drei Posts, die aufeinander aufbauen: 1. <a
+href="./2026-04-22-event-basierte-daten.md">Event-basierte Daten</a> —
+wie landen Daten im System? 2. <strong>Embeddings und RAG</strong>
+<em>(dieser Post)</em> — wie werden sie durchsuchbar? 3. <a
+href="./2026-04-22-eino-vs-langgraph.md">Eino vs. LangGraph</a> — wie
+nutzt ein Agent das alles?</p>
+</blockquote>
+<p>Im vorherigen Post über Event-basierte Daten kam eine Frage vor, die
+ich in Gesprächen immer wieder gestellt bekomme: <strong>Warum
+verwandelt man einen Satz wie “VPN connection broken since the latest
+Windows update” erst in eine Zahlenreihe, bevor man ihn speichert? Warum
+reicht der Text nicht?</strong></p>
+<p>Diese Frage ist völlig berechtigt. Und die ehrliche Antwort darauf —
+ohne Mathe, aber mit genug Tiefe, um sie zu <em>verstehen</em> und nicht
+nur nachzuplappern — ist erstaunlich selten zu finden.</p>
+<p>Dieser Post ist für alle, die schon zehnmal gehört haben “wir machen
+RAG mit pgvector” und nicken, aber im Inneren denken: <em>Was genau
+heißt das eigentlich?</em> Für Kolleg:innen, für Kunden, für Chefs. Und
+ehrlich gesagt auch für einen selbst, weil es gut tut, die Sache einmal
+von Grund auf durchzudenken.</p>
+<h2 id="das-problem-volltext-suche-versteht-keine-bedeutung">Das
+Problem: Volltext-Suche versteht keine Bedeutung</h2>
+<p>Nehmen wir zwei Sätze:</p>
+<ul>
+<li><em>“VPN connection broken since the latest Windows
+update.”</em></li>
+<li><em>“Nach dem letzten Patch kommen viele User nicht mehr ins
+Firmennetz.”</em></li>
+</ul>
+<p>Ein Mensch liest beide Sätze und sagt sofort: <strong>Das ist
+dasselbe Problem.</strong> Jemand beschreibt, dass nach einem
+Windows-Update die VPN-Verbindung nicht mehr funktioniert.</p>
+<p>Eine klassische Volltext-Suche versagt hier komplett. Sie sucht nach
+gemeinsamen Wörtern — und die beiden Sätze haben <strong>kein
+einziges</strong>. Kein “VPN” im zweiten, kein “Patch” im ersten, nicht
+mal die Sprache ist gleich. Für Postgres’ eingebaute Volltext-Suche
+(<code>tsvector</code>, <code>GIN</code>-Indexe) sind das zwei völlig
+fremde Datensätze.</p>
+<p>Das ist kein theoretisches Problem. Das ist der Grund, warum
+Helpdesks mit vollen Ticket-Datenbanken trotzdem doppelte Probleme
+parallel bearbeiten, warum interne Wikis mit Tausenden Artikeln gefühlt
+nichts zu finden wissen, und warum Kunden sich ärgern, wenn die Suche
+nichts Sinnvolles liefert, obwohl die Antwort irgendwo steht.</p>
+<p>Der Kern des Problems: <strong>Volltext-Suche arbeitet mit Zeichen,
+nicht mit Bedeutung.</strong></p>
+<h2 id="die-grundidee-bedeutung-als-koordinaten">Die Grundidee:
+Bedeutung als Koordinaten</h2>
+<p>Jetzt die entscheidende Wendung. Was wäre, wenn wir jedem Satz eine
+Art <em>Adresse</em> zuweisen könnten — so, dass Sätze mit ähnlicher
+Bedeutung nah beieinander liegen?</p>
+<p>Stellen wir uns eine Landkarte vor. Nicht eine geografische, sondern
+eine <strong>Bedeutungs-Landkarte</strong>. Auf dieser Karte liegen alle
+Sätze, die von Netzwerkproblemen handeln, in einer Ecke. Sätze über
+Gehaltsabrechnung in einer anderen. Sätze über Kaffee-Rezepte wieder
+woanders.</p>
+<p>Wenn man einen neuen Satz dazulegt, bekommt er eine Position auf
+dieser Karte. Die beiden VPN-Sätze von oben würden praktisch
+nebeneinander landen — weil sie dieselbe Bedeutung haben, auch wenn sie
+andere Wörter benutzen.</p>
+<p>Eine Suchanfrage funktioniert dann so: <em>“Gab es Probleme nach
+Windows- Updates?”</em> bekommt ihre eigene Adresse auf der Karte. Man
+schaut: was liegt in der Nähe? Das sind dann die relevanten Sätze —
+egal, welche Wörter sie verwenden.</p>
+<p>Das ist der Kern von Vector-Suche. Und der “Vektor” ist nichts
+anderes als die <strong>Koordinaten eines Textes auf dieser
+Bedeutungs-Landkarte</strong>.</p>
+<h2 id="warum-zahlen">Warum Zahlen?</h2>
+<p>Hier kommt die Frage von oben zurück: <em>Warum dann nicht einfach
+den Text speichern?</em></p>
+<p>Weil eine Landkarte mit Positionen nicht aus Wörtern bestehen kann,
+sondern aus Koordinaten — also Zahlen.</p>
+<p>Auf einer echten Landkarte ist eine Position
+<code>(48.1351, 11.5820)</code> — Breitengrad und Längengrad von
+München. Zwei Zahlen. Auf unserer Bedeutungs-Landkarte reichen zwei
+Zahlen aber nicht aus. Sprache ist viel zu vielschichtig: Ist der Satz
+technisch oder umgangssprachlich? Positiv oder negativ? Vergangenheit
+oder Zukunft? Geht es um Personen, Objekte, Prozesse?</p>
+<p>Um all diese Dimensionen abzubilden, brauchen wir viele, viele
+“Achsen”. Typisch sind <strong>384, 768 oder 1536 Dimensionen</strong>
+pro Vektor. Das heißt: jeder Satz bekommt nicht zwei, sondern zum
+Beispiel 768 Koordinaten.</p>
+<p>Was da genau auf der Achse 47 oder 512 steckt, kann kein Mensch sagen
+— das Modell hat diese Achsen während seines Trainings selbst
+“erfunden”. Wahrscheinlich ist Achse 47 irgendwas wie <em>“wie technisch
+ist der Text?”</em> und Achse 512 etwas wie <em>“geht es um eine
+Person?”</em>, aber das sind nur vage Analogien. Der Punkt ist:
+<strong>Die Maschine hat einen Raum mit vielen Dimensionen, in dem
+Bedeutung zu Koordinaten wird.</strong></p>
+<p>Ein Embedding ist nichts anderes als dieser Koordinaten-Satz. Eine
+Zahlenreihe wie:</p>
+<pre><code>[0.12, -0.88, 0.43, 0.02, 0.77, ..., 0.07, -0.34]
+     → 768 oder mehr Einträge</code></pre>
+<p>Für den Menschen unleserlich. Für den Computer ein idealer
+Suchschlüssel.</p>
+<h2 id="nähe-statt-gleichheit">Nähe statt Gleichheit</h2>
+<p>Jetzt der zweite Aspekt: <em>wie misst man Nähe in so einem
+Raum?</em></p>
+<p>Auf einer zweidimensionalen Karte rechnet man Luftlinie: Pythagoras,
+Wurzel aus der Summe der Differenzen zum Quadrat. In einem
+768-dimensionalen Raum geht das auch — aber das Standardmaß ist ein
+anderes: der <strong>Winkel zwischen zwei Vektoren</strong>. Heißt
+<em>Cosine Similarity</em>.</p>
+<p>Die Intuition: Zwei Pfeile, die in dieselbe Richtung zeigen, sind
+ähnlich, egal wie lang sie sind. Das macht die Messung robust gegenüber
+Textlänge — ein kurzer und ein langer Satz über dasselbe Thema zeigen in
+dieselbe Richtung.</p>
+<p>Für den Alltag in der Datenbank sieht das so aus:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode sql"><code class="sourceCode sql"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">SELECT</span> text, <span class="dv">1</span> <span class="op">-</span> (embedding <span class="op">&lt;=&gt;</span> $<span class="dv">1</span>) <span class="kw">AS</span> score</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="kw">FROM</span>   <span class="kw">events</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="kw">ORDER</span>  <span class="kw">BY</span> embedding <span class="op">&lt;=&gt;</span> $<span class="dv">1</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="kw">LIMIT</span>  <span class="dv">5</span>;</span></code></pre></div>
+<p><code>&lt;=&gt;</code> ist der Cosine-Distanz-Operator von pgvector.
+Das ist wirklich alles: “gib mir die fünf Einträge, deren Embedding am
+nächsten an diesem Such-Embedding dran ist.” Kein Fine-Tuning, keine
+Magie, keine Konfiguration.</p>
+<h2 id="wie-lernt-das-modell-diese-landkarte">Wie lernt das Modell diese
+Landkarte?</h2>
+<p>Kurz — ohne Mathe, weil das den Rahmen sprengen würde, aber mit genug
+Intuition, um es zu begreifen:</p>
+<p>Ein Embedding-Modell wird auf gigantischen Mengen Text trainiert.
+Während des Trainings bekommt es systematisch Beispiele, <strong>welche
+Texte zusammen gehören</strong> und welche nicht. Etwa: “Diese beiden
+Absätze stammen aus demselben Artikel — sie sollten ähnliche Embeddings
+bekommen.” Oder: “Dieser Satz ist eine Frage, das hier die passende
+Antwort — also nah zueinander.”</p>
+<p>Über Milliarden solcher Trainingsschritte findet das Modell von
+selbst Koordinaten, bei denen ähnliche Texte nah beieinander landen. Die
+768 Dimensionen und die konkrete Bedeutung jeder einzelnen entstehen
+dabei <strong>emergent</strong> — niemand programmiert sie hart.</p>
+<p>Das Ergebnis ist ein eingefrorenes Modell, das für jeden neuen Text
+in Millisekunden die Koordinaten ausspucken kann.
+<code>granite-embedding</code>, das wir bei OOS einsetzen, ist so ein
+Modell. <code>nomic-embed-text</code>, OpenAI’s
+<code>text-embedding-3</code>, Googles <code>gemini-embedding</code>
+sind andere. Sie unterscheiden sich in Größe, Geschwindigkeit,
+Sprachabdeckung und Qualität, aber das Grundprinzip ist dasselbe.</p>
+<p>Wichtig zu wissen: <strong>Das Embedding-Modell ist nicht dasselbe
+wie ein LLM.</strong> Ein LLM (wie Claude oder GPT) erzeugt Text. Ein
+Embedding-Modell erzeugt Koordinaten. Beide arbeiten intern mit
+ähnlicher Technik (Transformer- Netzen), aber der Zweck ist
+unterschiedlich. Embedding-Modelle sind oft 10-100-mal kleiner und
+schneller.</p>
+<h2 id="wann-passt-es-und-wann-nicht">Wann passt es — und wann
+nicht</h2>
+<p>Zwei Vektoren sind nah, wenn sie <strong>dieselbe Bedeutung</strong>
+tragen. Klingt einfach, hat aber Nuancen, die man kennen sollte, bevor
+man die Technik produktiv einsetzt:</p>
+<p><strong>Funktioniert gut:</strong></p>
+<ul>
+<li>Synonyme und Umschreibungen (“Auto” vs. “Fahrzeug”)</li>
+<li>Sprachgrenzen (Deutsch/Englisch, bei multilingualen Modellen)</li>
+<li>Lange und kurze Texte über dasselbe Thema</li>
+<li>Tippfehler und umgangssprachliche Varianten (“email” vs. “Mail”
+vs. “E-Mail”)</li>
+</ul>
+<p><strong>Funktioniert schlecht:</strong></p>
+<ul>
+<li>Exakte Zahlen oder IDs (“Rechnung 12345” findet “Rechnung 12346” —
+ähnlich, aber falsch)</li>
+<li>Verneinungen werden oft übersehen (“VPN geht” und “VPN geht nicht”
+können sehr nah beieinander landen)</li>
+<li>Fachspezifische Abkürzungen, die das Modell im Training nie gesehen
+hat</li>
+<li>Sehr kurze Texte (ein einzelnes Wort hat kaum Kontext für
+Embeddings)</li>
+</ul>
+<p>Deswegen ist Vector-Suche in der Praxis <strong>fast nie allein im
+Einsatz</strong>, sondern kombiniert mit klassischer Suche (Keyword,
+Volltext, Filter). Das nennt sich <em>Hybrid Search</em>: erst
+semantisch einen Top-Kandidaten-Pool holen, dann mit exakten Filtern
+aussieben. So erwischt man die relevanten Treffer und filtert Quatsch
+raus.</p>
+<h2 id="der-weg-zum-llm-retrieval-augmented-generation">Der Weg zum LLM:
+Retrieval-Augmented Generation</h2>
+<p>Jetzt haben wir verstanden, wie ein einzelner Satz zu Koordinaten
+wird und wie man ähnliche findet. Aber was hat das mit großen
+Sprachmodellen zu tun?</p>
+<p>Antwort: Alles. Das Muster heißt <strong>RAG — Retrieval-Augmented
+Generation</strong>. Drei Schritte:</p>
+<h3 id="schritt-1-retrieval-wiederfinden">Schritt 1: Retrieval
+(Wiederfinden)</h3>
+<p>Der Benutzer stellt eine Frage. Die Frage wird in ein Embedding
+verwandelt. Die Datenbank liefert die Top-K ähnlichsten Dokumente zurück
+— typisch 3 bis 20 Stück.</p>
+<pre><code>&quot;Gab es Probleme nach Windows-Updates?&quot;
+        │
+        ▼  (granite-embedding)
+   [0.31, -0.72, 0.15, ...]
+        │
+        ▼  (pgvector, SELECT ... ORDER BY embedding &lt;=&gt; $1)
+   → 5 ähnlichste Event-Texte</code></pre>
+<h3 id="schritt-2-augmentation-anreichern">Schritt 2: Augmentation
+(Anreichern)</h3>
+<p>Die gefundenen Dokumente werden in den Prompt für das LLM eingebaut.
+Das sieht ungefähr so aus:</p>
+<pre><code>Du bist ein Helpdesk-Assistent. Beantworte die Frage des Users
+auf Basis der folgenden Events aus unserem Ticket-System:
+
+---
+EVENT 1: VPN connection broken since the latest Windows update.
+         Multiple users affected.
+EVENT 2: Nach Windows-Update 24H2 läuft der VPN-Client auf manchen
+         Laptops nicht mehr.
+EVENT 3: Hotfix KB5055521 behebt das VPN-Problem nach Update.
+---
+
+Frage: Gab es Probleme nach Windows-Updates?</code></pre>
+<p>Das ist das “Augmented” in RAG. Das LLM bekommt <strong>Fakten
+mitgeliefert</strong>, die es sonst nicht wüsste.</p>
+<h3 id="schritt-3-generation-antworten">Schritt 3: Generation
+(Antworten)</h3>
+<p>Jetzt formuliert das LLM eine Antwort. Aber nicht aus seinem
+Trainingsdaten- Gedächtnis, sondern aus dem Kontext, den wir ihm gerade
+hingelegt haben. Zum Beispiel:</p>
+<blockquote>
+<p><em>“Ja, nach dem Windows-Update 24H2 gab es Probleme mit dem
+VPN-Client. Mehrere User waren betroffen. Der Hotfix KB5055521 behebt
+das Problem.”</em></p>
+</blockquote>
+<p>Das LLM hat die Information nicht <em>gewusst</em>. Es hat sie
+<em>gelesen und zusammengefasst</em>. Genau das ist der Trick.</p>
+<h2 id="warum-rag-und-nicht-fine-tuning">Warum RAG und nicht
+Fine-Tuning?</h2>
+<p>Eine oft gestellte Anschluss-Frage: <em>Warum trainiert man das LLM
+nicht einfach auf die eigenen Daten?</em> Das ginge technisch — nennt
+sich Fine-Tuning. Aber:</p>
+<ul>
+<li><strong>Teuer.</strong> Fine-Tuning kostet pro Durchlauf viel
+Rechenzeit, oft ein Vielfaches einer monatlichen API-Rechnung.</li>
+<li><strong>Langsam.</strong> Man kann nicht jeden neuen Ticket-Eintrag
+sofort ins Modell backen. RAG sieht neue Daten sofort.</li>
+<li><strong>Weniger präzise.</strong> Ein fine-getuntes Modell “weiß”
+Dinge, aber es kann nicht sagen, <em>woher</em> es das weiß. RAG kann
+die Quelle mitliefern (“das steht in Event 2”).</li>
+<li><strong>Nicht mehr änderbar.</strong> Was fein-getunt ist, bleibt
+drin. Wenn sich Inhalte ändern oder gelöscht werden, muss man neu
+trainieren. RAG: alte Datensätze aus der DB löschen, fertig.</li>
+</ul>
+<p>Für <strong>sich schnell ändernde Firmendaten</strong> ist RAG fast
+immer die bessere Wahl. Fine-Tuning macht Sinn, wenn man dem Modell
+<strong>Stil oder Format</strong> beibringen will, nicht Fakten.</p>
+<h2 id="grenzen-von-rag">Grenzen von RAG</h2>
+<p>Wer RAG produktiv einsetzt, stolpert irgendwann über diese
+Grenzen:</p>
+<ul>
+<li><strong>Kontext-Fenster.</strong> LLMs können nur eine begrenzte
+Menge Text auf einmal lesen. Wer 50 Dokumente à 10 Seiten mitgibt,
+sprengt das Fenster. Deswegen gibt es <em>Chunking</em> — Dokumente in
+kleine Abschnitte zerlegen, nur die passendsten mitgeben.</li>
+<li><strong>Die Suche ist nur so gut wie die Embeddings.</strong> Wenn
+das Embedding-Modell eure Fachbegriffe nicht kennt, findet es die
+relevanten Treffer schlicht nicht. Für Spezialdomänen (Medizin, Jura)
+lohnt sich manchmal ein domänenspezifisches Modell.</li>
+<li><strong>Halluzinationen.</strong> Das LLM kann immer noch Dinge
+dazuerfinden, auch wenn die Quellen klar sind. Deshalb in sensiblen
+Kontexten: immer die Quelle anzeigen, nie blind der Antwort
+vertrauen.</li>
+<li><strong>Datenschutz.</strong> Wer Kunden-Events in ein kommerzielles
+LLM schickt, hat ein Datenschutz-Problem. Deshalb setzen wir bei OOS auf
+lokale Modelle über Ollama — granite-embedding fürs Indexieren, Gemma
+oder Qwen fürs Generieren. Nichts verlässt die eigene
+Infrastruktur.</li>
+</ul>
+<h2 id="was-nimmt-man-daraus-mit">Was nimmt man daraus mit?</h2>
+<p>Wenn ihr das nächste Mal jemandem erklären müsst, warum ihr Daten als
+Vektoren speichert — das ist die Kurzfassung:</p>
+<ol type="1">
+<li><strong>Texte haben Bedeutung, nicht nur Wörter.</strong>
+Volltext-Suche findet keine Synonyme, keine Umschreibungen, keine
+Sprachwechsel.</li>
+<li><strong>Ein Embedding ist die Koordinate eines Textes auf einer
+Bedeutungs- Landkarte.</strong> Ähnliche Texte liegen nah
+beieinander.</li>
+<li><strong>Die Landkarte hat viele Dimensionen (hunderte),</strong>
+weil Sprache zu vielschichtig für zwei Achsen ist.</li>
+<li><strong>Ähnlichkeit misst man als Winkel zwischen Vektoren</strong>
+— Cosine Similarity.</li>
+<li><strong>RAG heißt: semantisch suchen, Treffer an ein LLM
+weitergeben, LLM formuliert die Antwort.</strong> Das verbindet große
+Sprachmodelle mit eigenen Daten, ohne die Modelle neu trainieren zu
+müssen.</li>
+</ol>
+<p>Das ist die ganze Geschichte. Ohne Mathe, ohne Transformer-Bilder,
+ohne Matrix-Multiplikation. Wer das verstanden hat, kann in Architektur-
+Meetings fundiert mitreden — und Kunden überzeugen, warum <em>“wir bauen
+einen Chatbot auf euren Tickets”</em> keine Zauberei ist, sondern eine
+überschaubare Pipeline aus Embedding-Modell, Vector-Store und LLM.</p>
+<hr />
+<p><strong>Empfehlung fürs Weiterlesen:</strong> Wer tiefer einsteigen
+will, findet bei OpenAI, Anthropic und in der pgvector-Doku gute
+technische Ressourcen. Für die Intuition hilft es aber oft mehr, einmal
+selbst zu spielen: <code>ollama pull granite-embedding</code>, ein paar
+Sätze embedden lassen, Abstände vergleichen. Nichts klärt schneller als
+20 Zeilen Python oder Go.</p>
+<hr />
+<p><strong>Zurück in der Serie:</strong> <a
+href="./2026-04-22-event-basierte-daten.md">← Teil 1 — Event-basierte
+Daten</a></p>
+<p><strong>Weiter in der Serie:</strong> <a
+href="./2026-04-22-eino-vs-langgraph.md">Teil 3 — Eino vs. LangGraph
+→</a></p>
+
+    <div class="post-footer">
+      <a href="/blog/">← Zurück zur Übersicht</a>
+      <span>© 2026 Frank &amp; Tristan von Schrenk</span>
+    </div>
+  </article>
+</div>
+
+<footer class="site">
+  <div class="wrap">
+    <div>© 2026 Frank &amp; Tristan von Schrenk · onisin OS ist source-available.</div>
+    <div>
+      <a href="https://docs.onisin.com">Docs</a>
+      &nbsp;·&nbsp;
+      <a href="https://docs.onisin.com/license.html">License</a>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

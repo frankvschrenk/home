@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wohin die LLM-Reise geht — und warum Anthropic besser
+aufgestellt ist als die anderen — onisin OS Blog</title>
+  <meta name="description" content="Matrizen, Attention, Quantisierung,
+photonische Prozessoren. Was unter der Haube eines LLMs passiert, welche
+Techniken die kommenden Jahre prägen werden, warum Quantencomputer hier
+nichts helfen, und warum ausgerechnet Anthropic — nicht OpenAI, nicht
+Google — die konzeptionell stärkste Position hat. Ein Essay mit einer
+überraschenden FLOP-Rechnung am Ende.">
+  <link rel="stylesheet" href="../blog.css">
+</head>
+<body>
+
+<header class="site">
+  <div class="wrap">
+    <div class="brand">
+      <span class="dot"></span>
+      <a href="/">onisin OS</a>
+    </div>
+    <nav class="primary">
+      <a href="/#how">Wie es funktioniert</a>
+      <a href="/#security">Sicherheit</a>
+      <a href="/blog/" class="active">Blog</a>
+      <a href="https://docs.onisin.com">Docs</a>
+      <a class="gh-link" href="https://github.com/frankvschrenk/onisin"
+         target="_blank" rel="noopener" aria-label="onisin OS on GitHub">
+        <svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"
+             fill="currentColor" aria-hidden="true">
+          <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/>
+        </svg>
+        <span>GitHub</span>
+      </a>
+    </nav>
+  </div>
+</header>
+
+<div class="wrap">
+  <article class="post">
+    <header class="post-head">
+      <div class="post-meta">22. April 2026</div>
+      <h1>Wohin die LLM-Reise geht — und warum Anthropic besser
+aufgestellt ist als die anderen</h1>
+    </header>
+
+<p>Es gibt gerade zwei Sorten Texte über LLMs: die, die behaupten dass
+AI in fünf Jahren die Welt übernimmt, und die, die behaupten dass alles
+nur Statistik-Tricks sind und bald wieder zusammenfällt. Beide sind
+Unsinn. Die interessanteren Fragen liegen dazwischen, und sie kommen
+ohne Buzzwords aus.</p>
+<p>Dieser Post ist ein Versuch, die wirklich relevanten Entwicklungen zu
+ordnen. Keine Pressemitteilungen, keine Roadmap-Prognosen. Nur: was
+passiert gerade unter der Haube, welche Techniken werden die nächsten
+Jahre prägen, wo sind die physischen Grenzen, und warum ist ausgerechnet
+Anthropic — nicht OpenAI, nicht Google — konzeptuell am besten
+aufgestellt für das, was kommt.</p>
+<p>Am Ende steht eine kleine Rechnung, die auch erfahrene Entwickler oft
+überrascht: wieviele Gleitkomma-Operationen eigentlich nötig sind, damit
+ein LLM sagt: <em>“Gras ist grün.”</em></p>
+<h2 id="was-in-so-einem-modell-eigentlich-passiert">Was in so einem
+Modell eigentlich passiert</h2>
+<p>Bevor man über die Zukunft reden kann, muss man kurz klarmachen, was
+ein LLM <em>ist</em>. Nicht im Marketing-Sinne, sondern mechanisch. Drei
+Begriffe reichen, um 90% zu verstehen:</p>
+<p><strong>Embeddings</strong> sind die Koordinaten. Jedes Token (ein
+Wort, ein Wortteil, ein Satzzeichen) wird zu einem Vektor mit ein paar
+tausend Zahlen. Das haben wir in einem <a
+href="./2026-04-22-embeddings-und-rag.md">anderen Post ausführlich
+behandelt</a> — kurz: Bedeutung wird zu Geometrie.</p>
+<p><strong>Attention</strong> ist das Herzstück. Wenn das Modell das
+Wort <em>“Bank”</em> liest, schaut es durch den gesamten Kontext und
+fragt: welche anderen Wörter sind gerade wichtig, um zu entscheiden, ob
+“Bank” hier das Geldinstitut oder die Parkbank bedeutet? Das passiert
+nicht als Regel-Logik, sondern als Matrix-Rechnung: Jedes Token wird mit
+jedem anderen Token verglichen, eine Gewichtung entsteht, und der
+resultierende Kontext fließt in die nächste Schicht.</p>
+<p><strong>Feedforward-Schichten</strong> sind das, was zwischen den
+Attention-Blöcken liegt. Riesige Matrixmultiplikationen, die die
+kontextualisierte Information weiterverarbeiten. Hier sitzen die
+allermeisten Parameter eines Modells. Ein Großteil dessen, was ein LLM
+an Wissen speichert, steckt in diesen Gewichten.</p>
+<p>Das Ganze wird in Dutzenden bis Hunderten solcher Schichten
+gestapelt. Ein 70-Milliarden-Parameter-Modell besteht im Wesentlichen
+aus <strong>Matrizen voller Zahlen</strong>, die bei jeder Eingabe
+miteinander verrechnet werden.</p>
+<p>Alles andere — System-Prompts, Tool-Calls, RAG, Agenten-Loops — ist
+Software <em>um</em> dieses mathematische Herz herum. Nicht das Herz
+selbst.</p>
+<h2 id="wie-ein-modell-lernt-rlhf-und-warum-es-grenzen-hat">Wie ein
+Modell lernt: RLHF und warum es Grenzen hat</h2>
+<p>Ein Modell wird in drei Phasen trainiert. Erst das
+<strong>Pre-Training</strong>: Milliarden Tokens Internet-Text, das
+Modell lernt einfach, was das nächste Token in einem Satz wahrscheinlich
+ist. Das macht es sprachlich kompetent, aber auch beliebig — es würde
+genauso überzeugend Bombenbau- Anleitungen produzieren wie Kochrezepte,
+weil es keinen Begriff davon hat, was erwünscht ist.</p>
+<p>Dann kommt <strong>Instruction-Tuning</strong>: Menschen schreiben
+Beispiele, wie “richtige” Antworten aussehen, und das Modell wird darauf
+angepasst. Es lernt, dem Muster <em>Frage → hilfreiche Antwort</em> zu
+folgen.</p>
+<p>Und schließlich <strong>RLHF — Reinforcement Learning from Human
+Feedback</strong>. Menschliche Bewerter lesen zwei mögliche Antworten
+des Modells und wählen die bessere. Aus Tausenden solcher Vergleiche
+entsteht ein <em>Reward-Modell</em>, das wiederum dazu benutzt wird, das
+Hauptmodell zu verfeinern. Das ist der Schritt, der aus einem sprachlich
+fähigen Modell einen Assistenten macht, der als hilfreich wahrgenommen
+wird.</p>
+<p>Das Problem dabei: <strong>Der Mensch als Maßstab hat
+Grenzen.</strong> RLHF optimiert auf das, was Bewerter
+<em>bevorzugen</em>, nicht auf das, was <em>richtig</em> ist. Modelle
+lernen schnell, höflich, selbstsicher und zustimmend zu klingen — auch
+wenn sie falsch liegen. Sycophancy (“Speichelleckerei”) ist keine
+Charaktereigenschaft der Modelle, sondern ein direkter Nebeneffekt des
+Trainingsverfahrens.</p>
+<p>Deshalb gibt es inzwischen Varianten wie <strong>RLAIF —
+Reinforcement Learning from AI Feedback</strong>, bei dem ein anderes
+Modell als Bewerter fungiert, nach klaren schriftlichen Prinzipien. Das
+skaliert besser und ist konsistenter. Anthropic hat das Konzept unter
+dem Namen <strong>Constitutional AI</strong> publiziert und einen
+Großteil seines Alignment- Ansatzes darauf aufgebaut: Statt Menschen
+hunderttausend Urteile treffen zu lassen, wird dem Modell ein
+Grundsatz-Katalog an die Hand gegeben, gegen den es sich selbst
+kritisiert und verbessert.</p>
+<p>Das klingt technisch, ist aber eine <strong>philosophische
+Weichenstellung</strong>: Welche Prinzipien genau im Katalog stehen,
+prägt das Modell-Verhalten. Anthropic hat diesen Katalog öffentlich
+gemacht. OpenAI hat das nie getan.</p>
+<h2 id="warum-quantencomputer-hier-nicht-helfen">Warum Quantencomputer
+hier nicht helfen</h2>
+<p>An dieser Stelle kommt die Zukunftsfrage: <em>wie bekommen wir diese
+Modelle schneller, billiger, sparsamer?</em> Und hier wird viel Unsinn
+erzählt.</p>
+<p>Der Klassiker: “Quantencomputer werden LLMs revolutionieren.”
+<strong>Falsch.</strong> Quantencomputer sind gut für spezifische
+Probleme — Kryptographie (Shor-Algorithmus), Suchprobleme (Grover),
+bestimmte Physik-Simulationen. Sie sind <em>nicht</em> gut für
+Matrixmultiplikationen an großen dichten Matrizen, genau das was LLMs
+tun. Im Gegenteil: Quanten-Hardware leidet unter Decoherenz, braucht
+exotische Kühlung und kann heute gerade mal einige hundert Qubits
+rauschen-frei halten. Ein Standard-Transformer rechnet mit Milliarden
+reellen Zahlen pro Schritt. Das sind zwei völlig unterschiedliche
+Welten.</p>
+<p>Wer dir etwas anderes erzählt, verwechselt “neu und aufregend” mit
+“technisch passend”.</p>
+<h2
+id="warum-photonische-prozessoren-tatsächlich-etwas-bringen-würden">Warum
+photonische Prozessoren tatsächlich etwas bringen würden</h2>
+<p>Photonische Chips dagegen sind ernsthaft interessant. Die Idee: statt
+Elektronen durch Silizium zu schieben, Licht durch Wellenleiter zu
+schicken und die Multiplikation <em>physisch</em> durch
+Interferenz-Muster zu erledigen. Das ist kein Hirngespinst — Firmen wie
+<em>Lightmatter</em> und <em>Lightelligence</em> bauen bereits
+Prototypen, die bei bestimmten Matrix-Operationen ein bis zwei
+Größenordnungen weniger Energie brauchen als GPUs.</p>
+<p>Aber auch hier die Wahrheit hinter dem Hype: Photonische Chips sind
+<strong>nicht beliebig programmierbar</strong>. Sie rechnen bevorzugt
+mit niedriger Präzision (manchmal nur 4 oder 8 Bit), weil optische
+Signale rauschen und exakte Werte nicht gut halten. Das zwingt die
+Modelle zu <strong>kompakteren Repräsentationen und robusteren
+Architekturen</strong>.</p>
+<p>Das ist paradoxerweise <em>gut</em>. Der Druck auf Effizienz treibt
+die Forschung zu Modellen, die weniger Parameter brauchen, stärker
+quantisiert sind, und weniger anfällig auf kleine Störungen reagieren.
+Photonik zwingt uns zu <em>besserer</em> KI, nicht nur zu
+schnellerer.</p>
+<h2
+id="quantisierung-und-warum-sie-mehr-ist-als-nur-kompression">Quantisierung
+— und warum sie mehr ist als nur Kompression</h2>
+<p>Womit wir beim vielleicht wichtigsten Trend der kommenden Jahre sind:
+<strong>Quantisierung</strong>. Statt jedes Gewicht als
+32-Bit-Fließkommazahl zu speichern (4 Bytes), speichert man es mit 8, 4,
+manchmal nur 2 Bit. Ein 70-Milliarden-Parameter-Modell, das im Original
+280 GB RAM braucht, passt in quantisierter Form auf eine
+Consumer-Grafikkarte mit 24 GB.</p>
+<p>Die Kunst dabei: <strong>Die Qualität darf nicht abstürzen.</strong>
+Moderne Verfahren (GPTQ, AWQ, QLoRA) schaffen es, mit
+4-Bit-Quantisierung praktisch keine spürbare Qualitätseinbuße zu
+erzeugen. Das ist der Grund, warum wir heute Llama, Qwen, Gemma auf
+Laptops laufen lassen können — vor fünf Jahren undenkbar.</p>
+<p>Die Richtung ist klar: immer aggressivere Quantisierung, kombiniert
+mit besserer Architektur (Mixture-of-Experts, um nicht alle Parameter
+für jede Anfrage zu aktivieren), kombiniert mit spezialisierten Chips
+(photonisch oder wenigstens quantisierungsfreundlich). In fünf Jahren
+werden Modelle mit Qualität wie GPT-4 auf Smartphones laufen. Das ist
+keine Prognose, das ist eine nüchterne Extrapolation der letzten drei
+Jahre.</p>
+<h2 id="wohin-die-reise-also-geht">Wohin die Reise also geht</h2>
+<p>Drei Trends werden sich überlagern:</p>
+<p><strong>Erstens: kleinere, spezialisierte Modelle.</strong> Die Ära
+der “ein Modell für alles” geht zuende. Stattdessen: ein Orchestrator
+(groß, generell) der viele spezialisierte Modelle koordiniert. Das spart
+Energie und erhöht die Genauigkeit in jeder Einzeldomäne.</p>
+<p><strong>Zweitens: längerer Kontext und bessere Gedächtnisse.</strong>
+Heute passen einige Hunderttausend Tokens ins Kontextfenster. In fünf
+Jahren werden es Millionen sein, und zusätzlich externes Gedächtnis
+(RAG, Memory-Mechanismen) routiniert eingesetzt. Das verändert, was
+Modelle als Agenten leisten können — von “einfache Aufgabe” zu
+“mehrtägige Projekte”.</p>
+<p><strong>Drittens: Interpretierbarkeit.</strong> Das ist der Punkt, an
+dem Anthropic abhebt, und darum gehört ihm der nächste Abschnitt.</p>
+<h2 id="warum-anthropic-besser-aufgestellt-ist">Warum Anthropic besser
+aufgestellt ist</h2>
+<p>Hier wird der Post persönlich, und hier lehne ich mich raus. Ich
+nutze Claude seit Monaten täglich, und ich habe mir bewusst angeschaut,
+was die einzelnen Labs machen. Mein Urteil — und es ist ein Urteil,
+keine Gewissheit:</p>
+<p><strong>Anthropic spielt ein anderes Spiel als OpenAI und
+Google.</strong></p>
+<p>OpenAI ist ein Produktunternehmen. Sie veröffentlichen schnell, sie
+jagen Benchmarks, sie bauen breit — ChatGPT, Sora, Agents, Codex, Voice.
+Die Strategie ist klar: Marktführer werden durch schiere Geschwindigkeit
+und Featureumfang.</p>
+<p>Google hat die beste Forschung und die größte Infrastruktur der Welt,
+aber die Produkte wirken oft zögerlich und vom eigenen Ökosystem
+erdrückt. Gemini ist technisch brillant, fühlt sich aber immer noch an
+wie etwas, das Google als Abwehrmaßnahme baut, nicht aus
+Überzeugung.</p>
+<p>Anthropic macht zwei Dinge konsequent anders:</p>
+<p><strong>1. Forschung zu Interpretability ist Kernauftrag, nicht
+Nebenprodukt.</strong></p>
+<p>Während andere Labs ihre Modelle als Black Boxes verkaufen,
+publiziert Anthropic regelmäßig Paper darüber, <strong>was tatsächlich
+in den Modellen passiert</strong> — welche Neuronen für welche Konzepte
+zuständig sind, wie Entscheidungen intern zustande kommen, wo Modelle
+systematisch lügen oder Fehler machen. <em>“Scaling
+Monosemanticity”</em>, <em>“Toy Models of Superposition”</em>,
+<em>“Tracing the Thoughts of a Language Model”</em> — das sind keine
+PR-Spielzeuge, sondern echte wissenschaftliche Fortschritte.</p>
+<p>Der Grund: Wer die internen Prozesse eines Modells <strong>sichtbar
+machen</strong> kann, kann auch eingreifen, erklären, kontrollieren. Das
+ist für Industriekunden in sensiblen Bereichen — Finanzen, Medizin,
+Behörden — auf lange Sicht entscheidender als das letzte
+Benchmark-Prozent.</p>
+<p><strong>2. Responsible Scaling Policy als öffentliche
+Selbstbindung.</strong></p>
+<p>Anthropic hat öffentlich festgelegt, welche Fähigkeitsstufen ihrer
+Modelle (AI Safety Levels, ASL) welche Sicherheitsmaßnahmen erzwingen.
+Das ist ein <strong>überprüfbarer Commitment-Rahmen</strong>, den OpenAI
+explizit <em>nicht</em> hat. Samuel Altmans “wir sind vorsichtig” ist
+rhetorisch, nicht operational.</p>
+<p>Für einen CTO, der überlegt, auf welchem Lab er die nächsten fünf
+Jahre aufbauen soll, ist das ein relevantes Signal. Nicht weil Anthropic
+moralisch besser wäre, sondern weil <strong>überprüfbare
+Selbstbindung</strong> robuster ist als freundliche Beteuerungen.</p>
+<p><strong>3. Produktphilosophie als Ausdruck der Werte.</strong></p>
+<p>Das merkt man sogar an kleinen Dingen. Anthropic verkauft Claude
+weniger als “Werkzeug das alles macht”, sondern mehr als “Raum zum
+Denken” — ein Begriff, den sie selbst benutzen. Im Produkt gibt es keine
+Werbung, keine Dark Patterns, keine Manipulations-Tricks zur
+Verweildauer-Erhöhung. Das wirkt auf den ersten Blick altmodisch, ist
+aber eine strategische Entscheidung: wer Vertrauen aufbauen will, kann
+sich Manipulation nicht leisten.</p>
+<p>Und vielleicht das stärkste Signal: <strong>Anthropic hat MCP als
+offenen Standard publiziert</strong>, nicht als proprietäres
+Anthropic-Feature behalten. Das ist eine Entscheidung gegen
+kurzfristigen Lock-in zugunsten eines langfristig nutzbaren Ökosystems.
+OpenAI hätte das anders gemacht.</p>
+<p>Das alles heißt nicht, dass Anthropic gewinnen wird. Das können sie
+auch finanziell noch verlieren, und wenn OpenAI in zwei Jahren ein
+dreifach so gutes Modell hat, ist alles oben relativiert. Aber die
+<strong>konzeptuelle Position</strong> ist die stärkste, und darauf
+bauen die nächsten Jahre auf.</p>
+<h2 id="eine-rechnung-zum-schluss-was-kostet-gras-ist-grün">Eine
+Rechnung zum Schluss: was kostet “Gras ist grün”?</h2>
+<p>Stell dir die Frage: <em>“Welche Farbe hat Gras im Sommer bei genug
+Regen?”</em></p>
+<p>Ein Fünfjähriger antwortet in einer halben Sekunde: <em>“Grün.”</em>
+Er braucht dafür ein paar Mikrojoule Energie im Gehirn. Sein Gehirn ist
+eines der effizientesten Rechensysteme des bekannten Universums.</p>
+<p>Wenn du dieselbe Frage an ein lokales 27-Milliarden-Parameter-Modell
+(z.B. Gemma 2 27B) stellst, passiert Folgendes:</p>
+<p><strong>Eingabe verarbeiten (Prefill).</strong> Die Frage hat etwa 12
+Tokens. Die Faustregel für einen Forward-Pass ist:</p>
+<blockquote>
+<p><em>FLOPs ≈ 2 × Parameter × Tokens</em></p>
+</blockquote>
+<p>Die 2 kommt daher, dass jede Gewichts-Anwendung aus Multiplikation
+und Addition besteht. Also:</p>
+<pre><code>27 × 10⁹ Parameter × 12 Tokens × 2 = ~650 × 10⁹ FLOPs  (650 GFLOPs)</code></pre>
+<p><strong>Ausgabe erzeugen (Decode).</strong> Pro Antwort-Token sind
+das nochmal:</p>
+<pre><code>27 × 10⁹ × 1 × 2 = 54 × 10⁹ FLOPs pro Token  (54 GFLOPs)</code></pre>
+<p>Bei einer höflichen Antwort mit 10 Tokens also weitere <strong>540
+GFLOPs</strong>.</p>
+<p><strong>Gesamt: ungefähr 1,2 TFLOPs.</strong> Eine
+Billion-zweihundert-Milliarden Gleitkomma-Operationen. Für ein einziges
+Wort, das ein Fünfjähriger in einem Wimpernschlag liefert.</p>
+<p>Ein M3 Pro schafft unter Volllast etwa 5 TFLOPs. Dein Laptop rechnet
+also <strong>rund eine Viertelsekunde</strong> bei voller Auslastung
+aller Recheneinheiten, um “Grün.” zu sagen.</p>
+<p>Eine H100 in einem Rechenzentrum macht das in Millisekunden — aber
+bei einem Strombedarf von etwa 700 Watt. Multipliziert mit den
+Milliarden Anfragen, die täglich weltweit an LLMs gehen, ergibt das
+einen Energieverbrauch, der inzwischen auf Kraftwerks-Ebene diskutiert
+wird.</p>
+<p><strong>Und das ist nur die Inferenz.</strong> Das einmalige Training
+eines modernen Frontier-Modells liegt bei etwa 10²³ FLOPs. Zehn
+Größenordnungen mehr. Das entspricht dem Stromverbrauch einer Kleinstadt
+über Wochen.</p>
+<h2 id="die-pointe">Die Pointe</h2>
+<p>Warum ist das wichtig?</p>
+<p>Weil es zwei Dinge gleichzeitig zeigt:</p>
+<p><strong>Erstens:</strong> Wie absurd aufwendig die heutige Art ist,
+Intelligenz künstlich zu erzeugen. Wir brennen Kraftwerke ab, um einem
+Fünfjährigen-Wissen hinterherzulaufen. Das ist ein starkes Argument
+dafür, dass die Architektur noch nicht fertig ist — dass da grundlegend
+effizientere Ansätze kommen <em>müssen</em>, und dass sie kommen
+<em>werden</em>. Photonik, Quantisierung, spezialisierte Chips, bessere
+Architekturen. Wir sind noch früh.</p>
+<p><strong>Zweitens:</strong> Warum die Frage nach <em>Qualität und
+Vertrauen</em> so viel wichtiger ist als die Frage nach
+<em>Geschwindigkeit</em>. Wenn eine Anfrage ohnehin so viele Ressourcen
+verbraucht, ist die entscheidende Frage nicht, ob die Antwort in 500ms
+oder 800ms kommt, sondern <strong>ob sie richtig ist und ob man sich
+darauf verlassen kann</strong>. Genau in dieser Dimension sehe ich
+Anthropic als am besten positioniert.</p>
+<p>Es ist ein guter Moment, sich bewusst für den langen Weg zu
+entscheiden — in der eigenen Architektur, bei der Wahl der Partner, und
+in der Art, wie man über diese Technologie spricht. Weniger Hype, mehr
+Handwerk. Das sind die Unternehmen, die in zehn Jahren noch da sein
+werden.</p>
+<hr />
+<p><em>Wer bis hier gelesen hat, ist der Zielgruppe dieses Blogs:
+Menschen, die verstehen wollen, was wirklich passiert, nicht nur was
+gerade laut getrommelt wird. Feedback, Widerspruch und Korrekturen sind
+willkommen.</em></p>
+
+    <div class="post-footer">
+      <a href="/blog/">← Zurück zur Übersicht</a>
+      <span>© 2026 Frank &amp; Tristan von Schrenk</span>
+    </div>
+  </article>
+</div>
+
+<footer class="site">
+  <div class="wrap">
+    <div>© 2026 Frank &amp; Tristan von Schrenk · onisin OS ist source-available.</div>
+    <div>
+      <a href="https://docs.onisin.com">Docs</a>
+      &nbsp;·&nbsp;
+      <a href="https://docs.onisin.com/license.html">License</a>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>
