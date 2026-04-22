@@ -30,7 +30,7 @@ Begriffe reichen, um 90% zu verstehen:
 **Embeddings** sind die Koordinaten. Jedes Token (ein Wort, ein Wortteil,
 ein Satzzeichen) wird zu einem Vektor mit ein paar tausend Zahlen. Das
 haben wir in einem [anderen Post ausführlich
-behandelt](./2026-04-22-embeddings-und-rag.md) — kurz: Bedeutung wird zu
+behandelt](./2026-04-22-embeddings-und-rag.html) — kurz: Bedeutung wird zu
 Geometrie.
 
 **Attention** ist das Herzstück. Wenn das Modell das Wort *"Bank"* liest,

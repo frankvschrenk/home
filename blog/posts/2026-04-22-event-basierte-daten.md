@@ -9,8 +9,8 @@ series_index: 1
 > **Teil 1 der Serie *LLM-Systeme in der Praxis*.** Drei Posts, die aufeinander
 > aufbauen:
 > 1. **Event-basierte Daten** *(dieser Post)* — wie landen Daten im System?
-> 2. [Embeddings und RAG](./2026-04-22-embeddings-und-rag.md) — wie werden sie durchsuchbar?
-> 3. [Eino vs. LangGraph](./2026-04-22-eino-vs-langgraph.md) — wie nutzt ein Agent das alles?
+> 2. [Embeddings und RAG](./2026-04-22-embeddings-und-rag.html) — wie werden sie durchsuchbar?
+> 3. [Eino vs. LangGraph](./2026-04-22-eino-vs-langgraph.html) — wie nutzt ein Agent das alles?
 
 *Event Sourcing*, *Event-Driven Architecture*, *CQRS*, *Change Data Capture*,
 *Event Streams*, *Kafka*, *EventStoreDB* — in Architektur-Meetings fallen
@@ -165,7 +165,7 @@ Kontext mitgeben* — heißt **Retrieval-Augmented Generation** (RAG) und ist
 inzwischen der Standard-Weg, um große Sprachmodelle mit firmenspezifischem
 Wissen zu verbinden, ohne sie neu zu trainieren. Warum genau der Umweg über
 Vektoren funktioniert, und wo RAG an seine Grenzen stößt, steht im nächsten
-Teil der Serie: [Embeddings und RAG verständlich erklärt](./2026-04-22-embeddings-und-rag.md).
+Teil der Serie: [Embeddings und RAG verständlich erklärt](./2026-04-22-embeddings-und-rag.html).
 
 ## Die Landschaft der Event-Stores
 
@@ -378,4 +378,4 @@ oben.
 ---
 
 **Weiter in der Serie:**
-[Teil 2 — Embeddings und RAG verständlich erklärt →](./2026-04-22-embeddings-und-rag.md)
+[Teil 2 — Embeddings und RAG verständlich erklärt →](./2026-04-22-embeddings-und-rag.html)

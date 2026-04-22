@@ -8,8 +8,8 @@ series_index: 3
 
 > **Teil 3 der Serie *LLM-Systeme in der Praxis*.** Drei Posts, die aufeinander
 > aufbauen:
-> 1. [Event-basierte Daten](./2026-04-22-event-basierte-daten.md) — wie landen Daten im System?
-> 2. [Embeddings und RAG](./2026-04-22-embeddings-und-rag.md) — wie werden sie durchsuchbar?
+> 1. [Event-basierte Daten](./2026-04-22-event-basierte-daten.html) — wie landen Daten im System?
+> 2. [Embeddings und RAG](./2026-04-22-embeddings-und-rag.html) — wie werden sie durchsuchbar?
 > 3. **Eino vs. LangGraph** *(dieser Post)* — wie nutzt ein Agent das alles?
 
 Jede Woche ein neues Framework, jede Woche ein neues Buzzword. LangGraph, Eino,
@@ -546,7 +546,7 @@ braucht.
 ---
 
 **Zurück in der Serie:**
-[← Teil 2 — Embeddings und RAG](./2026-04-22-embeddings-und-rag.md)
+[← Teil 2 — Embeddings und RAG](./2026-04-22-embeddings-und-rag.html)
 
 **Zum Start der Serie:**
-[Teil 1 — Event-basierte Daten](./2026-04-22-event-basierte-daten.md)
+[Teil 1 — Event-basierte Daten](./2026-04-22-event-basierte-daten.html)
