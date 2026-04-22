@@ -115,9 +115,15 @@ for md in "$POSTS_DIR"/*.md; do
   # blog also serves pretty URLs like /articles/<slug>/ — GitHub
   # Pages auto-serves index.html from a folder. The .html form
   # above stays for backward compatibility.
+  #
+  # The template was written with relative paths that assume the
+  # flat URL (articles/<slug>.html), so we patch one level of
+  # "../" into "../../" when copying to the pretty form. Only the
+  # stylesheet link is affected today; if more relative assets are
+  # added later, extend this sed invocation.
   pretty_dir="$OUT_DIR/$slug"
   mkdir -p "$pretty_dir"
-  cp "$out" "$pretty_dir/index.html"
+  sed 's|href="../blog.css"|href="../../blog.css"|g' "$out" > "$pretty_dir/index.html"
 
   echo "  rendered  $slug"
   printf '%s|%s|%s|%s\n' "$date" "$slug" "$title" "$description" >> "$MANIFEST"
