@@ -267,22 +267,47 @@
     }
 
     /* --- Screenshots -------------------------------------------------- */
-    .screenshots {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 20px;
-      margin-top: 40px;
+    .screenshot-tabs {
+      margin-top: 32px;
     }
-    @media (max-width: 900px) { .screenshots { grid-template-columns: 1fr; } }
-
-    .screenshot-frame {
+    .screenshot-tab-nav {
+      display: flex;
+      gap: 0;
+      border-bottom: 2px solid var(--rule);
+      margin-bottom: 0;
+    }
+    .screenshot-tab-nav button {
+      appearance: none;
+      border: none;
+      background: transparent;
+      padding: 10px 22px;
+      font: inherit;
+      font-size: 0.92rem;
+      font-weight: 600;
+      color: var(--ink-faint);
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -2px;
+      transition: color 120ms ease, border-color 120ms ease;
+    }
+    .screenshot-tab-nav button.active {
+      color: var(--brand);
+      border-bottom-color: var(--brand);
+    }
+    .screenshot-tab-nav button:hover:not(.active) {
+      color: var(--ink);
+    }
+    .screenshot-panel {
+      display: none;
       background: var(--bg-card);
       border: 1px solid var(--rule);
-      border-radius: var(--radius);
-      padding: 12px;
+      border-top: none;
+      border-radius: 0 0 var(--radius) var(--radius);
+      padding: 16px;
       box-shadow: var(--shadow);
     }
-    .screenshot-frame img {
+    .screenshot-panel.active { display: block; }
+    .screenshot-panel img {
       display: block;
       width: 100%;
       height: auto;
@@ -578,23 +603,31 @@
       DSL with a live preview.
     </p>
 
-    <div class="screenshots">
-      <div class="screenshot-frame">
+    <div class="screenshot-tabs">
+      <div class="screenshot-tab-nav">
+        <button class="active" onclick="showTab(0)" data-i18n-de>oos — Suche</button>
+        <button class="active" onclick="showTab(0)" data-i18n-en>oos — Search</button>
+        <button onclick="showTab(1)" data-i18n-de>oos — Assistent</button>
+        <button onclick="showTab(1)" data-i18n-en>oos — Assistant</button>
+        <button onclick="showTab(2)" data-i18n-de>oosd — Designer</button>
+        <button onclick="showTab(2)" data-i18n-en>oosd — Designer</button>
+      </div>
+      <div class="screenshot-panel active" id="ss-0">
         <img src="oos1.png" alt="onisin OS — Chat mit Suchergebnis im Tab" loading="lazy">
         <div class="screenshot-caption">
-          <span data-i18n-de>oos — Suchanfrage und Ergebnis-Board</span>
-          <span data-i18n-en>oos — search query and result board</span>
+          <span data-i18n-de>oos — Suchanfrage und Ergebnis-Board im Tab</span>
+          <span data-i18n-en>oos — search query and result board in tab</span>
         </div>
       </div>
-      <div class="screenshot-frame">
+      <div class="screenshot-panel" id="ss-1">
         <img src="oos2.png" alt="onisin OS — Chat-Assistent" loading="lazy">
         <div class="screenshot-caption">
           <span data-i18n-de>oos — Chat-Assistent mit strukturierter Antwort</span>
           <span data-i18n-en>oos — chat assistant with structured answer</span>
         </div>
       </div>
-      <div class="screenshot-frame">
-        <img src="oosd.png" alt="OnisinOS Designer — Domain- und View-Editor" loading="lazy">
+      <div class="screenshot-panel" id="ss-2">
+        <img src="oosd.png" alt="OnisinOS Designer" loading="lazy">
         <div class="screenshot-caption">
           <span data-i18n-de>oosd — Domain- und View-Editor mit Live-Vorschau</span>
           <span data-i18n-en>oosd — domain and view editor with live preview</span>
@@ -1081,6 +1114,17 @@
 
     de.addEventListener('click', () => setLang('de'));
     en.addEventListener('click', () => setLang('en'));
+
+    // Screenshot tab switcher
+    window.showTab = function(idx) {
+      document.querySelectorAll('.screenshot-panel').forEach((p, i) => {
+        p.classList.toggle('active', i === idx);
+      });
+      // sync all nav buttons (de+en pairs share same index)
+      const btns = document.querySelectorAll('.screenshot-tab-nav button');
+      // 3 tabs × 2 languages = 6 buttons; pairs are [0,1], [2,3], [4,5]
+      btns.forEach((b, i) => b.classList.toggle('active', Math.floor(i / 2) === idx));
+    };
 
     function setLang(l) {
       html.setAttribute('lang', l);
