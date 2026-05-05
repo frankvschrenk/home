@@ -266,6 +266,36 @@
       text-align: center;
     }
 
+    /* --- Screenshots -------------------------------------------------- */
+    .screenshots {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+      margin-top: 40px;
+    }
+    @media (max-width: 900px) { .screenshots { grid-template-columns: 1fr; } }
+
+    .screenshot-frame {
+      background: var(--bg-card);
+      border: 1px solid var(--rule);
+      border-radius: var(--radius);
+      padding: 12px;
+      box-shadow: var(--shadow);
+    }
+    .screenshot-frame img {
+      display: block;
+      width: 100%;
+      height: auto;
+      border-radius: 6px;
+      border: 1px solid var(--rule);
+    }
+    .screenshot-caption {
+      margin-top: 10px;
+      font-size: 0.88rem;
+      color: var(--ink-faint);
+      text-align: center;
+    }
+
     /* --- Cards grid --------------------------------------------------- */
     .cards {
       display: grid;
@@ -529,44 +559,46 @@
   </div>
 </section>
 
-<!-- =============================== VIDEO =============================== -->
+<!-- =============================== SCREENSHOTS ========================= -->
 <section>
   <div class="wrap">
-    <h2 data-i18n-de>onisin OS in zwei Minuten</h2>
-    <h2 data-i18n-en>onisin OS in two minutes</h2>
+    <h2 data-i18n-de>onisin OS in Aktion</h2>
+    <h2 data-i18n-en>onisin OS in action</h2>
 
     <p data-i18n-de>
-      Eine kurze Tour durch den Demo-Fall: Anmeldung über OIDC, eine
-      Chat-Anfrage an den KI-Assistenten, eine generierte
-      GraphQL-Abfrage und das dynamisch gerenderte Ergebnis-Board.
+      Der Chat-Assistent stellt Fragen in natürlicher Sprache — das
+      Ergebnis erscheint als strukturiertes Board im Tab daneben.
+      Der Designer erlaubt es, Domains und Views direkt in der DSL
+      zu bearbeiten und die Vorschau live zu sehen.
     </p>
     <p data-i18n-en>
-      A short tour through the demo case: OIDC sign-in, a chat
-      request to the AI assistant, a generated GraphQL query and the
-      dynamically rendered result board.
+      The chat assistant answers questions in natural language — the
+      result appears as a structured board in the adjacent tab.
+      The designer lets you edit domains and views directly in the
+      DSL with a live preview.
     </p>
 
-    <div class="video-stage">
-      <div class="frame">
-        <video id="tour-video"
-               controls
-               preload="metadata"
-               playsinline
-               crossorigin="anonymous">
-          <source id="tour-video-src" src="oos_01_de.mp4" type="video/mp4">
-          <p data-i18n-de>
-            Ihr Browser unterstützt kein HTML5-Video.
-            <a href="oos_01_de.mp4">Video herunterladen</a>.
-          </p>
-          <p data-i18n-en>
-            Your browser does not support HTML5 video.
-            <a href="oos_01_en.mp4">Download the video</a>.
-          </p>
-        </video>
+    <div class="screenshots">
+      <div class="screenshot-frame">
+        <img src="oos1.png" alt="onisin OS — Chat mit Suchergebnis im Tab" loading="lazy">
+        <div class="screenshot-caption">
+          <span data-i18n-de>oos — Suchanfrage und Ergebnis-Board</span>
+          <span data-i18n-en>oos — search query and result board</span>
+        </div>
       </div>
-      <div class="caption">
-        <span data-i18n-de>Sprache des Videos wechselt automatisch mit der Seitensprache.</span>
-        <span data-i18n-en>Video language follows the page language automatically.</span>
+      <div class="screenshot-frame">
+        <img src="oos2.png" alt="onisin OS — Chat-Assistent" loading="lazy">
+        <div class="screenshot-caption">
+          <span data-i18n-de>oos — Chat-Assistent mit strukturierter Antwort</span>
+          <span data-i18n-en>oos — chat assistant with structured answer</span>
+        </div>
+      </div>
+      <div class="screenshot-frame">
+        <img src="oosd.png" alt="OnisinOS Designer — Domain- und View-Editor" loading="lazy">
+        <div class="screenshot-caption">
+          <span data-i18n-de>oosd — Domain- und View-Editor mit Live-Vorschau</span>
+          <span data-i18n-en>oosd — domain and view editor with live preview</span>
+        </div>
       </div>
     </div>
   </div>
@@ -619,21 +651,22 @@
       </div>
 
       <div class="card">
-        <div class="badge" data-i18n-de>Nativ, nicht Web</div>
-        <div class="badge" data-i18n-en>Native, not web</div>
+        <div class="badge" data-i18n-de>Desktop-First</div>
+        <div class="badge" data-i18n-en>Desktop-first</div>
         <h3 data-i18n-de>Echte Desktop-Anwendung</h3>
         <h3 data-i18n-en>A real desktop application</h3>
         <p data-i18n-de>
-          Der onisin-OS-Client ist eine native Anwendung auf Basis von
-          Fyne und Skia — keine WebView, keine JavaScript-Engine, keine
-          Browser-Angriffsfläche. Mehrere Fenster, echtes
-          Tastatur-Handling, vorhersehbares Verhalten.
+          Der onisin-OS-Client basiert auf Electrobun — einer
+          nativen macOS-Laufzeit mit Bun als Backend und React als
+          UI-Schicht. Kein Electron, kein Browser-Overhead.
+          Mehrere Fenster, echtes Tastatur-Handling,
+          vorhersehbares Verhalten.
         </p>
         <p data-i18n-en>
-          The onisin OS client is a native application built on Fyne
-          and Skia — no webview, no JavaScript engine, none of the
-          browser attack surface. Multiple windows, real keyboard
-          handling, predictable behaviour.
+          The onisin OS client is built on Electrobun — a native
+          macOS runtime with Bun as the backend and React as the
+          UI layer. No Electron, no browser overhead. Multiple
+          windows, real keyboard handling, predictable behaviour.
         </p>
       </div>
     </div>
@@ -702,39 +735,40 @@
         <g>
           <rect x="220" y="130" width="180" height="100" rx="10"
                 fill="#ffffff" stroke="#1e3a8a" stroke-width="2"/>
-          <text x="310" y="160" text-anchor="middle" font-family="system-ui, sans-serif"
+          <text x="310" y="158" text-anchor="middle" font-family="system-ui, sans-serif"
                 font-size="15" font-weight="700" fill="#1e3a8a">oos</text>
-          <text x="310" y="180" text-anchor="middle" font-family="system-ui, sans-serif"
+          <text x="310" y="176" text-anchor="middle" font-family="system-ui, sans-serif"
                 font-size="11" fill="#6b7280">
             <tspan data-i18n-de>Desktop-Client</tspan>
             <tspan data-i18n-en>Desktop client</tspan>
           </text>
-          <text x="310" y="198" text-anchor="middle" font-family="system-ui, sans-serif"
-                font-size="11" fill="#6b7280">Fyne · Skia · GPU</text>
-          <text x="310" y="216" text-anchor="middle" font-family="system-ui, sans-serif"
+          <text x="310" y="193" text-anchor="middle" font-family="system-ui, sans-serif"
+                font-size="11" fill="#6b7280">Electrobun · Bun · React</text>
+          <text x="310" y="210" text-anchor="middle" font-family="system-ui, sans-serif"
                 font-size="11" fill="#6b7280">
-            <tspan data-i18n-de>Chat · Formulare · Boards</tspan>
-            <tspan data-i18n-en>Chat · forms · boards</tspan>
+            <tspan data-i18n-de>Chat · Boards · Designer</tspan>
+            <tspan data-i18n-en>Chat · boards · designer</tspan>
           </text>
         </g>
 
-        <!-- OOSP BACKEND -->
+        <!-- BACKEND SERVICES -->
         <g>
-          <rect x="450" y="130" width="200" height="100" rx="10"
+          <rect x="450" y="105" width="200" height="55" rx="10"
                 fill="#ffffff" stroke="#1e3a8a" stroke-width="2"/>
-          <text x="550" y="160" text-anchor="middle" font-family="system-ui, sans-serif"
-                font-size="15" font-weight="700" fill="#1e3a8a">oosp</text>
-          <text x="550" y="180" text-anchor="middle" font-family="system-ui, sans-serif"
+          <text x="550" y="129" text-anchor="middle" font-family="system-ui, sans-serif"
+                font-size="13" font-weight="700" fill="#1e3a8a">oosgql</text>
+          <text x="550" y="147" text-anchor="middle" font-family="system-ui, sans-serif"
+                font-size="11" fill="#6b7280">GraphQL · Hono · Bun</text>
+        </g>
+        <g>
+          <rect x="450" y="172" width="200" height="55" rx="10"
+                fill="#ffffff" stroke="#1e3a8a" stroke-width="2"/>
+          <text x="550" y="196" text-anchor="middle" font-family="system-ui, sans-serif"
+                font-size="13" font-weight="700" fill="#1e3a8a">oosai</text>
+          <text x="550" y="214" text-anchor="middle" font-family="system-ui, sans-serif"
                 font-size="11" fill="#6b7280">
-            <tspan data-i18n-de>Backend</tspan>
-            <tspan data-i18n-en>Backend</tspan>
-          </text>
-          <text x="550" y="198" text-anchor="middle" font-family="system-ui, sans-serif"
-                font-size="11" fill="#6b7280">GraphQL · REST · MCP</text>
-          <text x="550" y="216" text-anchor="middle" font-family="system-ui, sans-serif"
-                font-size="11" fill="#6b7280">
-            <tspan data-i18n-de>Rollen · Schema · Tools</tspan>
-            <tspan data-i18n-en>Roles · schema · tools</tspan>
+            <tspan data-i18n-de>Embedding · RAG · Suche</tspan>
+            <tspan data-i18n-en>Embedding · RAG · search</tspan>
           </text>
         </g>
 
@@ -988,19 +1022,19 @@
       <div class="security-card">
         <div class="row">
           <span class="k">Client</span>
-          <span class="v">Fyne · Skia · GPU</span>
+          <span class="v">Electrobun · Bun · React</span>
         </div>
         <div class="row">
-          <span class="k">Backend</span>
-          <span class="v">Go · GraphQL · REST</span>
+          <span class="k">GraphQL</span>
+          <span class="v">oosgql · Hono · Bun</span>
+        </div>
+        <div class="row">
+          <span class="k">AI / RAG</span>
+          <span class="v">oosai · Ollama · pgvector</span>
         </div>
         <div class="row">
           <span class="k">Data</span>
           <span class="v">PostgreSQL · Oracle · MariaDB</span>
-        </div>
-        <div class="row">
-          <span class="k">Vector</span>
-          <span class="v">PostgreSQL + pgvector</span>
         </div>
         <div class="row">
           <span class="k">Auth</span>
@@ -1053,38 +1087,9 @@
       de.classList.toggle('on', l === 'de');
       en.classList.toggle('on', l === 'en');
       localStorage.setItem('onisin-lang', l);
-      swapVideoSource(l);
     }
 
-    // swapVideoSource switches the <source> of the tour video to the
-    // matching language file. It pauses the current playback first so
-    // the old audio track does not keep playing while the new source
-    // loads, and only restarts playback if the user was already
-    // watching.
-    function swapVideoSource(l) {
-      const video = document.getElementById('tour-video');
-      const src   = document.getElementById('tour-video-src');
-      if (!video || !src) return;
 
-      const next = l === 'en' ? 'oos_01_en.mp4' : 'oos_01_de.mp4';
-      const current = src.getAttribute('src');
-      if (current === next) return;
-
-      const wasPlaying = !video.paused && !video.ended;
-      const resumeAt   = video.currentTime;
-
-      video.pause();
-      src.setAttribute('src', next);
-      video.load();
-
-      if (wasPlaying) {
-        video.addEventListener('loadedmetadata', function once() {
-          video.removeEventListener('loadedmetadata', once);
-          try { video.currentTime = resumeAt; } catch (_) { /* ignore */ }
-          video.play().catch(() => { /* autoplay may be blocked */ });
-        });
-      }
-    }
   })();
 </script>
 
