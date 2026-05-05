@@ -1017,6 +1017,124 @@
   </div>
 </section>
 
+<!-- =============================== EVENT FLOW ========================== -->
+<section class="alt">
+  <div class="wrap">
+    <h2 data-i18n-de>Daten fließen — automatisch</h2>
+    <h2 data-i18n-en>Data flows — automatically</h2>
+
+    <p data-i18n-de>
+      Was im Chat eingegeben wird, landet nicht nur in einer Datenbank —
+      es wird sofort eingebettet, vektorisiert und für den KI-Assistenten
+      abrufbar gemacht. Ohne manuelle Schritte, ohne externe Dienste.
+    </p>
+    <p data-i18n-en>
+      What is entered in the chat does not just land in a database —
+      it is immediately embedded, vectorised and made retrievable for
+      the AI assistant. No manual steps, no external services.
+    </p>
+
+    <div class="diagram-shell" style="margin-top: 36px;">
+      <svg viewBox="0 0 900 160" xmlns="http://www.w3.org/2000/svg"
+           role="img" aria-label="Event sourcing flow">
+        <defs>
+          <marker id="ev-arrow" viewBox="0 0 10 10" refX="9" refY="5"
+                  markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="#1e3a8a"/>
+          </marker>
+        </defs>
+
+        <!-- Node 1: Chat -->
+        <g>
+          <rect x="10" y="50" width="130" height="60" rx="10"
+                fill="#ffffff" stroke="#1e3a8a" stroke-width="2"/>
+          <text text-anchor="middle" font-family="system-ui,sans-serif"
+                font-size="13" font-weight="700" fill="#1e3a8a">
+            <tspan x="75" y="77" data-i18n-de>Chat-Eingabe</tspan>
+            <tspan x="75" y="77" data-i18n-en>Chat input</tspan>
+          </text>
+          <text x="75" y="96" text-anchor="middle" font-family="system-ui,sans-serif"
+                font-size="10.5" fill="#6b7280">oos</text>
+        </g>
+
+        <!-- Arrow 1 -->
+        <line x1="140" y1="80" x2="185" y2="80" stroke="#1e3a8a" stroke-width="2"
+              marker-end="url(#ev-arrow)"/>
+
+        <!-- Node 2: Event-Tabelle -->
+        <g>
+          <rect x="185" y="50" width="140" height="60" rx="10"
+                fill="#ffffff" stroke="#1e3a8a" stroke-width="2"/>
+          <text text-anchor="middle" font-family="system-ui,sans-serif"
+                font-size="13" font-weight="700" fill="#1e3a8a">
+            <tspan x="255" y="77" data-i18n-de>Event-Tabelle</tspan>
+            <tspan x="255" y="77" data-i18n-en>Event table</tspan>
+          </text>
+          <text x="255" y="96" text-anchor="middle" font-family="system-ui,sans-serif"
+                font-size="10.5" fill="#6b7280">PostgreSQL · NOTIFY</text>
+        </g>
+
+        <!-- Arrow 2 -->
+        <line x1="325" y1="80" x2="370" y2="80" stroke="#1e3a8a" stroke-width="2"
+              marker-end="url(#ev-arrow)"/>
+
+        <!-- Node 3: Transformer -->
+        <g>
+          <rect x="370" y="50" width="140" height="60" rx="10"
+                fill="#ffffff" stroke="#1e3a8a" stroke-width="2"/>
+          <text text-anchor="middle" font-family="system-ui,sans-serif"
+                font-size="13" font-weight="700" fill="#1e3a8a">
+            <tspan x="440" y="77" data-i18n-de>Transformer</tspan>
+            <tspan x="440" y="77" data-i18n-en>Transformer</tspan>
+          </text>
+          <text text-anchor="middle" font-family="system-ui,sans-serif"
+                font-size="10.5" fill="#6b7280">
+            <tspan x="440" y="96" data-i18n-de>Chunks · Embedding-Modell</tspan>
+            <tspan x="440" y="96" data-i18n-en>Chunks · embedding model</tspan>
+          </text>
+        </g>
+
+        <!-- Arrow 3 -->
+        <line x1="510" y1="80" x2="555" y2="80" stroke="#1e3a8a" stroke-width="2"
+              marker-end="url(#ev-arrow)"/>
+
+        <!-- Node 4: Vektoren -->
+        <g>
+          <rect x="555" y="50" width="130" height="60" rx="10"
+                fill="#ffffff" stroke="#1e3a8a" stroke-width="2"/>
+          <text text-anchor="middle" font-family="system-ui,sans-serif"
+                font-size="13" font-weight="700" fill="#1e3a8a">
+            <tspan x="620" y="77" data-i18n-de>Vektoren</tspan>
+            <tspan x="620" y="77" data-i18n-en>Vectors</tspan>
+          </text>
+          <text x="620" y="96" text-anchor="middle" font-family="system-ui,sans-serif"
+                font-size="10.5" fill="#6b7280">pgvector</text>
+        </g>
+
+        <!-- Arrow 4 -->
+        <line x1="685" y1="80" x2="730" y2="80" stroke="#1e3a8a" stroke-width="2"
+              marker-end="url(#ev-arrow)"/>
+
+        <!-- Node 5: LLM -->
+        <g>
+          <rect x="730" y="50" width="155" height="60" rx="10"
+                fill="#fef3c7" stroke="#d97706" stroke-width="2"/>
+          <text text-anchor="middle" font-family="system-ui,sans-serif"
+                font-size="13" font-weight="700" fill="#92400e">
+            <tspan x="807" y="77" data-i18n-de>LLM holt Kontext</tspan>
+            <tspan x="807" y="77" data-i18n-en>LLM fetches context</tspan>
+          </text>
+          <text text-anchor="middle" font-family="system-ui,sans-serif"
+                font-size="10.5" fill="#92400e">
+            <tspan x="807" y="96" data-i18n-de>RAG · Semantic Search</tspan>
+            <tspan x="807" y="96" data-i18n-en>RAG · semantic search</tspan>
+          </text>
+        </g>
+      </svg>
+    </div>
+  </div>
+</section>
+
 <!-- =============================== SECURITY =========================== -->
 <section id="security">
   <div class="wrap">
@@ -1063,7 +1181,7 @@
         </div>
         <div class="row">
           <span class="k">AI / RAG</span>
-          <span class="v">oosai · Ollama · pgvector</span>
+          <span class="v">oosai · pgvector · OpenAI-compatible</span>
         </div>
         <div class="row">
           <span class="k">Data</span>
