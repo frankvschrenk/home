@@ -238,3 +238,59 @@ HTML_FOOT
 echo
 echo "Built $post_count post(s)."
 echo "Open: $INDEX"
+
+# ---------------------------------------------------------------
+# Step 3: regenerate sitemap.xml in the repo root.
+#
+# Includes the landing page, the blog index, and every rendered
+# article. The lastmod dates come from the post front matter so
+# they reflect content changes, not file-system noise.
+# ---------------------------------------------------------------
+
+SITEMAP="$(dirname "$SCRIPT_DIR")/sitemap.xml"
+TODAY="$(date -u +%Y-%m-%d)"
+
+{
+  cat <<'XML_HEAD'
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+
+  <!-- Main landing page -->
+  <url>
+    <loc>https://onisin.com/</loc>
+XML_HEAD
+  echo "    <lastmod>$TODAY</lastmod>"
+  cat <<'XML_STATIC'
+    <changefreq>monthly</changefreq>
+    <priority>1.0</priority>
+  </url>
+
+  <!-- Blog index -->
+  <url>
+    <loc>https://onisin.com/blog/</loc>
+XML_STATIC
+  echo "    <lastmod>$TODAY</lastmod>"
+  cat <<'XML_BLOG'
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+
+XML_BLOG
+
+  # One entry per post, sorted newest first.
+  sort -r "$MANIFEST" | while IFS='|' read -r date slug _title _desc; do
+    cat <<XML_ENTRY
+  <url>
+    <loc>https://onisin.com/blog/articles/$slug.html</loc>
+    <lastmod>$date</lastmod>
+    <changefreq>never</changefreq>
+    <priority>0.7</priority>
+  </url>
+
+XML_ENTRY
+  done
+
+  echo '</urlset>'
+} > "$SITEMAP"
+
+echo "Sitemap: $SITEMAP"
