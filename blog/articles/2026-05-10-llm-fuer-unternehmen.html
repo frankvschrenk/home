@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LLM für Unternehmen: Was wirklich zählt — und was
+nicht — onisin OS Blog</title>
+  <meta name="description" content="GenAI, RAG, Fine-tuning, Routing,
+GPU-Infrastruktur: Ein Gespräch das ich heute geführt habe, hat mir
+gezeigt wie viel Klarheit entsteht wenn man die Konzepte wirklich
+durchdenkt — statt nur Buzzwords zu sammeln.">
+  <link rel="stylesheet" href="../blog.css">
+</head>
+<body>
+
+<header class="site">
+  <div class="wrap">
+    <div class="brand">
+      <span class="dot"></span>
+      <a href="/">onisin OS</a>
+    </div>
+    <nav class="primary">
+      <a href="/#how">Wie es funktioniert</a>
+      <a href="/#security">Sicherheit</a>
+      <a href="/blog/" class="active">Blog</a>
+      <a href="https://docs.onisin.com">Docs</a>
+      <a class="gh-link" href="https://github.com/frankvschrenk/onisin"
+         target="_blank" rel="noopener" aria-label="onisin OS on GitHub">
+        <svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"
+             fill="currentColor" aria-hidden="true">
+          <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/>
+        </svg>
+        <span>GitHub</span>
+      </a>
+    </nav>
+  </div>
+</header>
+
+<div class="wrap">
+  <article class="post">
+    <header class="post-head">
+      <div class="post-meta">10. Mai 2026</div>
+      <h1>LLM für Unternehmen: Was wirklich zählt — und was nicht</h1>
+    </header>
+
+<blockquote>
+<p><strong>Teil 5 der Serie <em>LLM-Systeme in der Praxis</em>.</strong>
+1. <a href="../2026-04-22-event-basierte-daten/">Event-basierte
+Daten</a> — wie landen Daten im System? 2. <a
+href="../2026-04-22-embeddings-und-rag/">Embeddings und RAG</a> — wie
+werden sie durchsuchbar? 3. <a
+href="../2026-04-22-eino-vs-langgraph/">Eino vs. LangGraph</a> — wie
+nutzt ein Agent das alles? 4. <a
+href="../2026-05-08-kein-entscheidungsbaum-mehr/">Kein Entscheidungsbaum
+mehr</a> — Absichten verstehen ohne Regeln 5. <strong>LLM für
+Unternehmen</strong> <em>(dieser Post)</em></p>
+</blockquote>
+<p>Heute habe ich mich durch einen Stapel an Konzepten gearbeitet, die
+in der Unternehmens-KI-Welt gerade alle gleichzeitig auftauchen:
+Snowflake Cortex, AWS Bedrock, Databricks, RAG, Fine-tuning,
+LLM-Routing, GPU-Infrastruktur. Einzeln kennt man sie. Zusammen ergibt
+sich ein Bild das ich aufschreiben will, solange es frisch ist.</p>
+<p>Nicht als Tutorial. Eher als Denkprotokoll.</p>
+<h2 id="convenience-vs.-kontrolle">Convenience vs. Kontrolle</h2>
+<p>Snowflake hat eine Funktion namens <code>CORTEX.SUMMARIZE()</code>.
+Man gibt ihr einen Text, sie gibt eine Zusammenfassung zurück.
+SQL-Syntax, ein Aufruf, fertig.</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode sql"><code class="sourceCode sql"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">SELECT</span> SNOWFLAKE.CORTEX.SUMMARIZE(schadenbericht_text)</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="kw">FROM</span> schaden_tabelle</span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="kw">WHERE</span> datum <span class="op">&gt;</span> <span class="st">&#39;2024-01-01&#39;</span>;</span></code></pre></div>
+<p>Das ist verlockend. Und für viele Aufgaben — langen Text überblicken,
+erste Kategorisierung, schneller Überblick — ist es auch ausreichend.
+Das Modell dahinter ist ein Standard-LLM. Es muss den Inhalt nicht
+<em>verstehen</em>, es muss nur Sprache beherrschen. Zusammenfassen ist
+ein sprachliches Problem, kein Domänenproblem.</p>
+<p>Aber sobald die Frage domänenspezifisch wird — <em>Ist dieser Schaden
+regulierungspflichtig? Welche unserer Policen greift hier? Widerspricht
+das unseren AVB?</em> — reicht allgemeines Sprachverständnis nicht mehr.
+Das Modell kennt eure internen Bedingungswerke nicht. Es kennt eure
+Prozesse nicht. Es erfindet dann etwas, das klingt als ob es stimmt.</p>
+<p>Das ist der Moment, an dem Convenience zur Falle wird.</p>
+<p>Der Unterschied zwischen <code>CORTEX.SUMMARIZE()</code> und einem
+direkten LLM-Aufruf ist derselbe wie zwischen einem voreingestellten
+Equalizer und einem Mischpult: Das eine ist schneller, das andere gibt
+Kontrolle darüber was eigentlich passiert.</p>
+<h2 id="was-rag-wirklich-löst">Was RAG wirklich löst</h2>
+<p>RAG — Retrieval-Augmented Generation — ist die Antwort auf das
+Domänenproblem. Nicht das einzige, aber meistens das richtige.</p>
+<p>Die Idee ist einfach: Das Modell bleibt generisch. Das Wissen kommt
+zur Laufzeit aus eigenen Quellen. Der Ablauf:</p>
+<ol type="1">
+<li>Eigene Dokumente werden in kleine Chunks zerlegt.</li>
+<li>Jeder Chunk wird durch ein Embedding-Modell in einen Zahlenvektor
+umgerechnet.</li>
+<li>Diese Vektoren landen in einer Vektordatenbank (pgvector, Pinecone,
+Weaviate…).</li>
+<li>Kommt eine Anfrage, wird auch sie embedded — und die semantisch
+ähnlichsten Chunks werden herausgesucht.</li>
+<li>Diese Chunks kommen zusammen mit der Anfrage als Kontext in den
+Prompt.</li>
+<li>Das Modell antwortet auf Basis dieser echten Daten.</li>
+</ol>
+<p>Semantisch, nicht lexikalisch. „Feuchtigkeitsschaden” findet auch
+Treffer für „Schimmel” und „Durchfeuchtung” — weil das Embedding-Modell
+gelernt hat, dass diese Begriffe im selben Bedeutungsraum liegen. Kein
+Regelwerk, das man pflegt. Kein Dictionary, das man erweitert.</p>
+<p>Das bauen wir in onisin OS täglich. Das Prinzip ist universell.</p>
+<h2 id="warum-fine-tuning-meistens-die-falsche-erste-wahl-ist">Warum
+Fine-tuning meistens die falsche erste Wahl ist</h2>
+<p>Fine-tuning klingt attraktiv: Man nimmt ein fertiges Modell und
+trainiert es auf eigenen Daten nach. Es lernt die eigene Sprache, die
+eigenen Begriffe, den eigenen Stil.</p>
+<p>Das Problem: Ein Modell hat kein Gedächtnis für Versionen.</p>
+<p>Wenn man ein Modell auf AVB 2022 trainiert und dann auf AVB 2026
+nachtrainiert, vermischt sich beides irgendwo in den Gewichten. Das
+Modell weiß nicht was gilt. Es antwortet mit einer Mischung —
+überzeugend formuliert, sachlich falsch. Das nennt sich Catastrophic
+Forgetting, und es ist ein reales Problem, kein theoretisches.</p>
+<p>Bei RAG ist Versionierung trivial: Man aktualisiert das Dokument im
+Index. Fertig. Das Modell bekommt beim nächsten Aufruf den neuen Chunk.
+Keine Neutraining, kein Deployment, kein Risiko dass altes Wissen
+durchsickert.</p>
+<p>Fine-tuning hat seinen Platz — für Stil, Ton, grundlegendes
+Vokabular, Dinge die sich selten ändern. Aber als Ersatz für aktuelle
+Daten taugt es nicht.</p>
+<p><strong>Kurzformel:</strong> Fine-tuning für das <em>Was wir
+sind</em>. RAG für das <em>Was wir gerade wissen</em>.</p>
+<h2 id="das-llm-als-sprachinterface-nicht-als-sicherheitssystem">Das LLM
+als Sprachinterface — nicht als Sicherheitssystem</h2>
+<p>Ein Gedanke der mir wichtig ist, weil er in der Praxis oft falsch
+verstanden wird:</p>
+<p>Ein LLM ist ein Sprachmodell. Es ist darauf trainiert, hilfreich zu
+sein. Sicherheit ist kein Kernmerkmal — es ist eine nachträgliche
+Einschränkung.</p>
+<p>Ein System Prompt der sagt „User darf nur Dokumente mit Tag xyz
+sehen” ist kein Sicherheitssystem. Es ist eine höfliche Bitte an ein
+Modell das von Natur aus helfen will. Prompt Injection — jemand schreibt
+„Ignoriere alle vorherigen Anweisungen” — ist ein reales
+Angriffsszenario, keine akademische Übung.</p>
+<p>Echte Sicherheit liegt im Backend. Das Backend entscheidet welche
+Daten in den Kontext des LLM kommen — bevor das Modell sie sieht. Was
+das Modell nie sieht, kann es nicht leaken, egal was der User
+schreibt.</p>
+<p>Das Prinzip: Gruppenzugehörigkeit bestimmt die Datenbankabfrage. Die
+Datenbankabfrage bestimmt den Kontext. Der Kontext bestimmt die Antwort.
+Das LLM ist das letzte Glied, nicht das erste.</p>
+<p>Das ist Row Level Security — nicht als Datenbankfeature, sondern als
+Architekturprinzip.</p>
+<h2
+id="wie-modelle-gebaut-werden-und-was-das-für-unternehmen-bedeutet">Wie
+Modelle gebaut werden — und was das für Unternehmen bedeutet</h2>
+<p>Ein LLM entsteht in mehreren Stufen:</p>
+<p><strong>Pre-Training</strong> — das Fundament. Milliarden von Texten,
+Monate Rechenzeit, Millionen Dollar. Das machen OpenAI, Anthropic, Meta,
+Google. Kein Unternehmen macht das selbst.</p>
+<p><strong>Instruction Tuning</strong> — das Modell lernt, auf Fragen zu
+antworten statt Texte zu vervollständigen. Menschen schreiben Beispiele:
+Frage, ideale Antwort. Das Modell trainiert darauf.</p>
+<p><strong>RLHF</strong> — Menschen bewerten verschiedene Antworten. Das
+Modell lernt was bevorzugt wird. Hier entsteht der Charakter eines
+Assistenten.</p>
+<p><strong>Fine-tuning</strong> — hier kann ein Unternehmen einsteigen.
+Eigene Daten, eigener Stil, eigenes Vokabular. Technisch derselbe
+Prozess wie Instruction Tuning — aber mit eigenen Beispielen.</p>
+<p><strong>RAG</strong> — kein Training, sondern Laufzeit-Kontext. Das
+Modell verändert sich nicht. Das Wissen kommt mit jedem Aufruf neu
+rein.</p>
+<p>Für die meisten Unternehmens-Use-Cases ist RAG der richtige Einstieg.
+Günstig, flexibel, aktuell, und die Daten verlassen das System nicht —
+was regulatorisch erheblich ist.</p>
+<h2 id="routing-wer-entscheidet-welches-modell">Routing: Wer entscheidet
+welches Modell?</h2>
+<p>Nicht jede Anfrage braucht dasselbe Modell. Eine einfache
+Zusammenfassung braucht kein 405-Milliarden-Parameter-Modell.
+Juristische Vertragsanalyse sollte nicht an ein 3B-Modell gehen.</p>
+<p>Programmatisch ist das schwer zu lösen. Sprache ist zu komplex für
+Regelwerke. „Kannst du kurz den Vertrag prüfen?” — „kurz” klingt
+einfach, „Vertrag prüfen” ist komplex. Kein if/else der Welt trifft das
+zuverlässig.</p>
+<p>Die elegante Lösung: Ein kleines, schnelles LLM klassifiziert die
+Anfrage bevor sie weitergeleitet wird. Nicht als vollständiger Chat —
+als reiner Classifier, der nur eine Frage beantwortet: <em>Wie komplex
+ist das?</em></p>
+<p>Das nennt sich LLM Cascade. Klein anfangen, Qualität prüfen, bei
+Bedarf eskalieren. 80% der Anfragen löst das kleine Modell. 15% das
+mittlere. 5% das große. Qualität bleibt hoch, Kosten fallen.</p>
+<p>Das Routing-Modell selbst braucht keine aufwendige Infrastruktur —
+ein kleines lokales Modell auf dem Client-Rechner reicht für die
+Klassifikation. Die eigentliche Anfrage geht dann gezielt an die
+richtige Infrastruktur.</p>
+<h2
+id="gpu-infrastruktur-bandbreite-schlägt-kapazität">GPU-Infrastruktur:
+Bandbreite schlägt Kapazität</h2>
+<p>Ein letzter Gedanke, der mich heute beschäftigt hat.</p>
+<p>LLM-Inference ist kein Storage-Problem — es ist ein
+Bandbreitenproblem. Bei jedem generierten Token muss das Modell alle
+seine Gewichte einmal durchlesen. Ein 405-Milliarden-Parameter-Modell in
+int4-Quantisierung sind ~200 GB. Pro Token. Das muss in Millisekunden
+passieren.</p>
+<p>Normaler RAM schafft ~100 GB/s. Nicht annähernd genug. GPU-VRAM mit
+HBM3 schafft ~3.000 GB/s. Deswegen laufen große Modelle auf GPUs — nicht
+wegen der Rechenleistung allein, sondern wegen der
+Speicherbandbreite.</p>
+<p>Vertikale Skalierung funktioniert kaum: HBM kann physisch nicht
+beliebig wachsen. Der einzige Weg ist horizontal — viele GPUs, direkt
+verbunden über NVLink, die gemeinsam als ein einziger großer Speicher
+wirken.</p>
+<p>Was NVIDIA mit dem GB200 NVL72 macht — 72 GPUs in einem Rack, 1,4 TB
+gemeinsamer VRAM, NVLink als internes Netz — ist im Grunde dieselbe
+Philosophie wie Oracle Exadata: Komplexität die früher Software lösen
+musste, in spezialisierte Hardware verlagern. Das Ergebnis ist weniger
+Overhead, mehr Bandbreite, ein einfacheres Software-Modell.</p>
+<p>Kein Unternehmen kauft das selbst. Aber es erklärt warum Managed
+Services wie AWS Bedrock oder Snowflake Cortex für Unternehmen der
+pragmatische Weg sind — und warum die Infrastruktur dahinter so teuer
+ist.</p>
+<h2 id="was-bleibt">Was bleibt</h2>
+<p>KI im Unternehmen ist kein Technologieproblem. Es ist ein
+Architekturfrage: Welche Daten dürfen wo hin? Wer sieht was? Welches
+Modell für welche Aufgabe? Wie halte ich das aktuell, sicher,
+nachvollziehbar?</p>
+<p>Ein LLM ist das Sprachzentrum. Die Intelligenz über Kontext,
+Berechtigung und Aktualität liegt im System drumherum. Das ist der
+Unterschied zwischen einem beeindruckenden Demo und einem
+produktionsreifen System.</p>
+<p>Das fühlt sich nach dem richtigen Rahmen an.</p>
+<hr />
+<p><em>Frank &amp; Tristan von Schrenk bauen onisin OS — ein AI-first
+Datensystem für Unternehmen. Der Code ist source-available auf <a
+href="https://github.com/frankvschrenk/onisin">GitHub</a>.</em></p>
+
+    <div class="post-footer">
+      <a href="/blog/">← Zurück zur Übersicht</a>
+      <span>© 2026 Frank &amp; Tristan von Schrenk</span>
+    </div>
+  </article>
+</div>
+
+<footer class="site">
+  <div class="wrap">
+    <div>© 2026 Frank &amp; Tristan von Schrenk · onisin OS ist source-available.</div>
+    <div>
+      <a href="https://docs.onisin.com">Docs</a>
+      &nbsp;·&nbsp;
+      <a href="https://docs.onisin.com/license.html">License</a>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>
