@@ -109,6 +109,7 @@ for md in "$POSTS_DIR"/*.md; do
     --to=html5 \
     --template="$TEMPLATE" \
     --metadata=date-human:"$date_human" \
+    --metadata=slug:"$slug" \
     --output="$out"
 
   # Mirror the rendered HTML into articles/<slug>/index.html so the
