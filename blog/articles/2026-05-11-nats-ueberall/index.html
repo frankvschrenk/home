@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Warum wir NATS überall einsetzen — und nicht
+bereuen — onisin OS Blog</title>
+  <meta name="description" content="oos, oosd, oosai, oosgql — jede
+Schicht von onisin OS redet über NATS. Keine HTTP-Clients, keine Load
+Balancer, kein Service Mesh. Dieser Artikel erklärt warum wir das so
+entschieden haben, und was wir dabei gelernt haben.">
+
+  <!-- Canonical URL -->
+  <link rel="canonical" href="https://onisin.com/blog/articles/2026-05-11-nats-ueberall.html">
+
+  <!-- Open Graph -->
+  <meta property="og:type"        content="article">
+  <meta property="og:url"         content="https://onisin.com/blog/articles/2026-05-11-nats-ueberall.html">
+  <meta property="og:site_name"   content="onisin OS Blog">
+  <meta property="og:title"       content="Warum wir NATS überall
+einsetzen — und nicht bereuen">
+  <meta property="og:description" content="oos, oosd, oosai, oosgql —
+jede Schicht von onisin OS redet über NATS. Keine HTTP-Clients, keine
+Load Balancer, kein Service Mesh. Dieser Artikel erklärt warum wir das
+so entschieden haben, und was wir dabei gelernt haben.">
+  <meta property="og:locale"      content="de_DE">
+  <meta property="article:published_time" content="2026-05-11">
+
+  <!-- Twitter / X Card -->
+  <meta name="twitter:card"        content="summary">
+  <meta name="twitter:title"       content="Warum wir NATS überall
+einsetzen — und nicht bereuen">
+  <meta name="twitter:description" content="oos, oosd, oosai, oosgql —
+jede Schicht von onisin OS redet über NATS. Keine HTTP-Clients, keine
+Load Balancer, kein Service Mesh. Dieser Artikel erklärt warum wir das
+so entschieden haben, und was wir dabei gelernt haben.">
+
+  <!-- Structured Data: BlogPosting -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "BlogPosting",
+    "headline": "Warum wir NATS überall einsetzen — und nicht bereuen",
+    "description": "oos, oosd, oosai, oosgql — jede Schicht von onisin
+OS redet über NATS. Keine HTTP-Clients, keine Load Balancer, kein
+Service Mesh. Dieser Artikel erklärt warum wir das so entschieden haben,
+und was wir dabei gelernt haben.",
+    "datePublished": "2026-05-11",
+    "url": "https://onisin.com/blog/articles/2026-05-11-nats-ueberall.html",
+    "author": {
+      "@type": "Person",
+      "name": "Frank von Schrenk",
+      "url": "https://onisin.com"
+    },
+    "publisher": {
+      "@type": "Organization",
+      "name": "onisin OS",
+      "url": "https://onisin.com"
+    }
+  }
+  </script>
+
+  <link rel="stylesheet" href="../../blog.css">
+</head>
+<body>
+
+<header class="site">
+  <div class="wrap">
+    <div class="brand">
+      <span class="dot"></span>
+      <a href="/">onisin OS</a>
+    </div>
+    <nav class="primary">
+      <a href="/#how">Wie es funktioniert</a>
+      <a href="/#security">Sicherheit</a>
+      <a href="/blog/" class="active">Blog</a>
+      <a href="https://docs.onisin.com">Docs</a>
+      <a class="gh-link" href="https://github.com/frankvschrenk/onisin"
+         target="_blank" rel="noopener" aria-label="onisin OS on GitHub">
+        <svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"
+             fill="currentColor" aria-hidden="true">
+          <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/>
+        </svg>
+        <span>GitHub</span>
+      </a>
+    </nav>
+  </div>
+</header>
+
+<div class="wrap">
+  <article class="post">
+    <header class="post-head">
+      <div class="post-meta">11. Mai 2026</div>
+      <h1>Warum wir NATS überall einsetzen — und nicht bereuen</h1>
+    </header>
+
+<p>Wenn man zum ersten Mal in den Quellcode von onisin OS schaut, fällt
+etwas auf: Es gibt keine HTTP-Clients zwischen den Services. Kein
+<code>fetch("http://oosai:8080/event")</code>, keine base URLs in
+Konfigurationsdateien, keinen Reverse Proxy der Requests verteilt.</p>
+<p>Stattdessen sieht man das überall:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode typescript"><code class="sourceCode typescript"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">// oosgql/src/command-handler.ts</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> <span class="cf">await</span> (<span class="kw">const</span> msg <span class="kw">of</span> nats<span class="op">.</span><span class="fu">subscribe</span>(<span class="st">&quot;oos.cmd.gql.query&quot;</span>)) {</span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">const</span> result <span class="op">=</span> <span class="cf">await</span> <span class="fu">graphql</span>({ schema<span class="op">:</span> host<span class="op">.</span><span class="fu">current</span>()<span class="op">,</span> source<span class="op">:</span> query })<span class="op">;</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    nats<span class="op">.</span><span class="fu">publish</span>(msg<span class="op">.</span><span class="at">reply</span><span class="op">,</span> sc<span class="op">.</span><span class="fu">encode</span>(<span class="bu">JSON</span><span class="op">.</span><span class="fu">stringify</span>(result)))<span class="op">;</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>}</span></code></pre></div>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode typescript"><code class="sourceCode typescript"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="co">// oosai/src/event-listener.ts</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> <span class="cf">await</span> (<span class="kw">const</span> msg <span class="kw">of</span> nats<span class="op">.</span><span class="fu">subscribe</span>(<span class="st">&quot;oos.events.police&quot;</span>)) {</span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">void</span> <span class="fu">processEventNotification</span>(sql<span class="op">,</span> embed<span class="op">,</span> mapping<span class="op">,</span> sc<span class="op">.</span><span class="fu">decode</span>(msg<span class="op">.</span><span class="at">data</span>))<span class="op">;</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>}</span></code></pre></div>
+<p>Das ist kein Zufall und kein Experiment. Das ist eine bewusste,
+durchgezogene Entscheidung — und dieser Artikel erklärt warum.</p>
+<hr />
+<h2 id="die-eigentliche-frage-hinter-warum-nats">Die eigentliche Frage
+hinter “Warum NATS?”</h2>
+<p>Die häufige Antwort auf diese Frage lautet: “NATS ist schnell.” Das
+stimmt. Millionen Nachrichten pro Sekunde, Latenz im
+Mikrosekundenbereich, Server-Binary unter 20 MB. Aber Geschwindigkeit
+war für uns nicht der Hauptgrund.</p>
+<p>Der Hauptgrund war: <strong>Wir wollten Services schreiben, nicht
+Infrastruktur verwalten.</strong></p>
+<p>REST zwingt dich, sehr früh sehr viele Entscheidungen zu treffen. Wo
+läuft Service B? Auf welchem Port? Mit welchem TLS-Zertifikat? Wie
+verteilst du Last auf drei Instanzen? Was passiert wenn Service B kurz
+nicht erreichbar ist — retry, circuit breaker, timeout?</p>
+<p>Das sind keine schlechten Fragen. Aber sie sind — wenn du ein
+kleines, fokussiertes System baust — die falschen Fragen zu Beginn.</p>
+<hr />
+<h2
+id="standort-unabhängigkeit-ohne-es-zu-merken">Standort-Unabhängigkeit,
+ohne es zu merken</h2>
+<p>In onisin OS weiß <code>oos</code> (das Desktop-Frontend) nicht, wo
+<code>oosgql</code> läuft. Es kennt nicht seine IP-Adresse, nicht seinen
+Port, nicht mal ob er gerade lokal oder in einem Container betrieben
+wird. Es kennt nur einen Subject-Namen:</p>
+<pre><code>oos.cmd.gql.query</code></pre>
+<p>Das ist alles. NATS übernimmt das Routing vollständig.</p>
+<p>In der klassischen Welt braucht Service A eine Konfiguration für
+Service B. In der NATS-Welt braucht Service A nur den Namen des Themas.
+Der Unterschied klingt klein, ist es aber nicht: Wenn
+<code>oosgql</code> auf eine andere Maschine umzieht, eine neue Instanz
+dazukommt oder der Prozess kurz neustartet — kein einziger Client muss
+angepasst werden.</p>
+<p>Das ist Location Transparency. Nicht als Konzept aus einem Buch,
+sondern als gelebte Realität im täglichen Betrieb.</p>
+<hr />
+<h2
+id="request-reply-fühlt-sich-synchron-an-ist-es-aber-nicht">Request-Reply
+fühlt sich synchron an — ist es aber nicht</h2>
+<p>Einer der häufigsten Einwände gegen Message-Systeme lautet: “Aber ich
+brauche manchmal eine Antwort. Ich kann nicht einfach Nachrichten
+abfeuern und hoffen.”</p>
+<p>NATS kennt das Muster. Es heißt Request-Reply, und es ist in die
+Library eingebaut:</p>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode typescript"><code class="sourceCode typescript"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Client-Seite: Anfrage stellen</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="kw">const</span> response <span class="op">=</span> <span class="cf">await</span> nats<span class="op">.</span><span class="fu">request</span>(<span class="st">&quot;oos.cmd.gql.query&quot;</span><span class="op">,</span> payload<span class="op">,</span> { timeout<span class="op">:</span> <span class="dv">5000</span> })<span class="op">;</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="kw">const</span> result   <span class="op">=</span> <span class="bu">JSON</span><span class="op">.</span><span class="fu">parse</span>(sc<span class="op">.</span><span class="fu">decode</span>(response<span class="op">.</span><span class="at">data</span>))<span class="op">;</span></span></code></pre></div>
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode typescript"><code class="sourceCode typescript"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Server-Seite: Anfrage beantworten</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> <span class="cf">await</span> (<span class="kw">const</span> msg <span class="kw">of</span> nats<span class="op">.</span><span class="fu">subscribe</span>(<span class="st">&quot;oos.cmd.gql.query&quot;</span>)) {</span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">const</span> result <span class="op">=</span> <span class="cf">await</span> <span class="fu">runQuery</span>(msg<span class="op">.</span><span class="at">data</span>)<span class="op">;</span></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>    nats<span class="op">.</span><span class="fu">publish</span>(msg<span class="op">.</span><span class="at">reply</span><span class="op">,</span> sc<span class="op">.</span><span class="fu">encode</span>(<span class="bu">JSON</span><span class="op">.</span><span class="fu">stringify</span>(result)))<span class="op">;</span></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>}</span></code></pre></div>
+<p>Das fühlt sich im Code wie ein normaler Funktionsaufruf an. Was im
+Hintergrund passiert ist trotzdem grundlegend anders als bei HTTP: NATS
+hält keine dauerhafte TCP-Verbindung zwischen Client und Server offen.
+Es vermittelt nur das Paket. Wenn der Server kurz überlastet ist, staut
+sich nichts auf beiden Seiten auf — NATS managed die Warteschlange.</p>
+<p>Das macht das System wesentlich unanfälliger für kaskadierende
+Ausfälle. Service A wird nicht träge, weil Service B gerade langsam
+ist.</p>
+<hr />
+<h2 id="pubsub-für-den-rest">Pub/Sub für den Rest</h2>
+<p>Nicht jede Kommunikation braucht eine Antwort. <code>oosai</code> zum
+Beispiel muss wissen, wenn ein neues Event in der Datenbank landet —
+aber es muss dafür nichts zurückschicken. Reine Benachrichtigung.</p>
+<div class="sourceCode" id="cb6"><pre
+class="sourceCode typescript"><code class="sourceCode typescript"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="co">// oosai/src/event-listener.ts — keine Antwort nötig</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> <span class="cf">await</span> (<span class="kw">const</span> msg <span class="kw">of</span> nats<span class="op">.</span><span class="fu">subscribe</span>(<span class="st">&quot;oos.events.police&quot;</span>)) {</span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">void</span> <span class="fu">processEventNotification</span>(sql<span class="op">,</span> embed<span class="op">,</span> mapping<span class="op">,</span> sc<span class="op">.</span><span class="fu">decode</span>(msg<span class="op">.</span><span class="at">data</span>))<span class="op">;</span></span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>}</span></code></pre></div>
+<p>Mit HTTP müsste <code>oosai</code> aktiv pollen oder <code>oos</code>
+müsste eine Liste von Webhook-URLs verwalten. Mit NATS ist es ein
+<code>publish()</code> auf der einen Seite und ein
+<code>subscribe()</code> auf der anderen. Wer zuhört, ist dem Sender
+völlig egal.</p>
+<p>Das gilt auch für <code>oosgql</code>, das beim Speichern einer
+Domain automatisch seinen GraphQL-Schema-Cache invalidiert:</p>
+<pre><code>oos.domain.changed  →  oosgql reagiert, baut Schema neu</code></pre>
+<p>Keine direkte Abhängigkeit, kein HTTP-Aufruf, kein Contract zwischen
+den Services außer dem Subject-Namen.</p>
+<hr />
+<h2 id="load-balancing-ohne-einen-einzigen-load-balancer">Load Balancing
+ohne einen einzigen Load Balancer</h2>
+<p>Wenn wir in Zukunft mehrere Instanzen von <code>oosgql</code>
+betreiben wollen — etwa weil das System unter Last steht — reicht es,
+eine zweite Instanz zu starten. NATS verteilt die Requests automatisch
+via Queue Groups. Kein NGINX, kein HAProxy, keine Ingress-Konfiguration
+in Kubernetes.</p>
+<pre><code>oosgql-1  ─┐
+oosgql-2  ─┤──  subscriben beide &quot;oos.cmd.gql.*&quot;
+oosgql-3  ─┘    → NATS verteilt Round-Robin</code></pre>
+<p>Das ist kein theoretischer Vorteil. Das ist eine Eigenschaft, die wir
+kostenlos bekommen, weil wir uns von Anfang an auf NATS als Transport
+festgelegt haben.</p>
+<hr />
+<h2 id="die-subject-hierarchie-als-lebende-dokumentation">Die
+Subject-Hierarchie als lebende Dokumentation</h2>
+<p>Wer verstehen will, was ein Service tut, liest seine NATS-Subjects.
+In onisin OS ist die Konvention konsequent:</p>
+<pre><code>oos.cmd.gql.query      — GraphQL-Abfrage ausführen
+oos.cmd.gql.mutation   — Mutation ausführen (permission-gated)
+oos.cmd.gql.view       — View-DSL-Quelle laden
+oos.cmd.gql.domain     — Domain-DSL-Quelle laden
+oos.cmd.event.refresh  — Event-Mappings neu laden
+oos.events.&lt;mapping&gt;   — Event-Notification (Pub/Sub)
+oos.domain.changed     — Domain wurde gespeichert</code></pre>
+<p>Das ist nicht nur Architektur. Das ist Dokumentation. Wer im Code
+nach <code>oos.cmd.gql</code> sucht, sieht sofort welche Services darauf
+reagieren und welche es aufrufen.</p>
+<hr />
+<h2 id="ist-das-noch-ein-microservice">Ist das noch ein
+Microservice?</h2>
+<p>Eine Frage die wir uns selbst gestellt haben: Wenn alle Services den
+gleichen NATS-Server benutzen, ist das nicht wieder eine enge Kopplung —
+nur auf einer anderen Ebene?</p>
+<p>Die ehrliche Antwort: Ja, es gibt eine Kopplung. Der NATS-Server ist
+ein Single Point of Failure. Aber er ist auch der einzige. Kein Service
+kennt einen anderen Service direkt. Jeder kennt nur Subjects.</p>
+<p>Der Unterschied zu einem Monolithen: Jeder Service lässt sich
+unabhängig deployen, neustarten und skalieren. Kein Service blockiert
+einen anderen beim Hochfahren. Wenn <code>oosai</code> abstürzt, können
+<code>oos</code> und <code>oosd</code> weiterarbeiten — sie bekommen nur
+keine Event-Verarbeitung mehr.</p>
+<p>Ob man das “Microservice” nennt oder nicht, ist uns ehrlich gesagt
+egal. Es funktioniert.</p>
+<hr />
+<h2 id="was-nats-nicht-kann">Was NATS nicht kann</h2>
+<p>Der Vollständigkeit halber: Es gibt Fälle wo wir NATS bewusst nicht
+einsetzen.</p>
+<p><strong>Persistenz.</strong> NATS hat JetStream für Durability — aber
+wir nutzen es noch nicht. Wenn <code>oosai</code> gerade offline ist und
+ein Event reinkommt, geht die NATS-Nachricht verloren. Deshalb gibt es
+in <code>oosai</code> einen Startup-Backfill, der unverarbeitete Events
+aus der Datenbank nachholt. NATS at-most-once ist für uns derzeit
+ausreichend; JetStream liegt als nächste Ausbaustufe parat.</p>
+<p><strong>Externe Clients.</strong> Das Browser-Frontend
+<code>apps/oos</code> (Electrobun) redet nicht direkt mit NATS. Es geht
+über einen lokalen Bun-HTTP-Gateway, der intern NATS-Requests feuert.
+Der Grund ist schlicht: WebSockets zu einem NATS-Server aus dem
+Browser-Kontext sind unnötige Komplexität wenn ein einfacher HTTP-Tunnel
+genauso gut funktioniert.</p>
+<p><strong>File-Transfers.</strong> Große Binärdaten gehören nicht in
+NATS-Messages. Das wäre Cargo-Kult.</p>
+<hr />
+<h2 id="fazit">Fazit</h2>
+<p>NATS hat onisin OS nicht zu einem besseren Projekt gemacht, weil es
+schnell ist. Es hat es besser gemacht, weil es uns erlaubt hat, über
+Services nachzudenken statt über Infrastruktur.</p>
+<p>Kein Service weiß wo der andere wohnt. Kein Load Balancer braucht
+Konfiguration. Kein Webhook-Vertrag muss gepflegt werden. Und wenn wir
+morgen <code>oosgql</code> in drei Instanzen aufteilen wollen, sind es
+drei Zeilen in einem Prozess-Manager — keine Architekturdebatte.</p>
+<p>Das ist der eigentliche Grund.</p>
+
+    <div class="post-footer">
+      <a href="/blog/">← Zurück zur Übersicht</a>
+      <span>© 2026 Frank &amp; Tristan von Schrenk</span>
+    </div>
+  </article>
+</div>
+
+<footer class="site">
+  <div class="wrap">
+    <div>© 2026 Frank &amp; Tristan von Schrenk · onisin OS ist source-available.</div>
+    <div>
+      <a href="https://docs.onisin.com">Docs</a>
+      &nbsp;·&nbsp;
+      <a href="https://docs.onisin.com/license.html">License</a>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>
