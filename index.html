@@ -580,6 +580,8 @@
       <span>onisin OS</span>
     </div>
     <nav class="primary">
+      <a href="#modules"  data-i18n-de>Module</a>
+      <a href="#modules"  data-i18n-en>Modules</a>
       <a href="#how"      data-i18n-de>Wie es funktioniert</a>
       <a href="#how"      data-i18n-en>How it works</a>
       <a href="#security" data-i18n-de>Sicherheit</a>
@@ -614,7 +616,7 @@
 <section class="hero">
   <div class="wrap">
     <div class="eyebrow" data-i18n-de>KI-gestütztes Rapid Application Development</div>
-    <div class="eyebrow" data-i18n-en>AI-Powered Rapid Application Development</div>
+    <div class="eyebrow" data-i18n-en>AI-powered Rapid Application Development</div>
 
     <h1 data-i18n-de>KI-First. Daten souverän.</h1>
     <h1 data-i18n-en>AI-first. Data sovereign.</h1>
@@ -645,16 +647,18 @@
     <h2 data-i18n-en>onisin OS in action</h2>
 
     <p data-i18n-de>
-      Der Chat-Assistent stellt Fragen in natürlicher Sprache — das
-      Ergebnis erscheint als strukturiertes Board im Tab daneben.
-      Der Designer erlaubt es, Domains und Views direkt in der DSL
-      zu bearbeiten und die Vorschau live zu sehen.
+      Der Chat-Assistent übersetzt natürlichsprachliche Anfragen automatisch
+      in GraphQL-Abfragen und rendert das Ergebnis als strukturiertes
+      Ergebnis-Board im Tab daneben. Der Designer erlaubt es, Domains und
+      Views direkt in der DSL zu bearbeiten — GraphQL-Schema, KI-Kontext
+      und UI-Vorschau entstehen sofort.
     </p>
     <p data-i18n-en>
-      The chat assistant answers questions in natural language — the
-      result appears as a structured board in the adjacent tab.
-      The designer lets you edit domains and views directly in the
-      DSL with a live preview.
+      The chat assistant automatically translates natural-language requests
+      into GraphQL queries and renders the result as a structured board
+      in the adjacent tab. The designer lets you edit domains and views
+      directly in the DSL — GraphQL schema, AI context, and UI preview
+      are generated immediately.
     </p>
 
     <div class="screenshot-tabs">
@@ -720,20 +724,20 @@
         <h3 data-i18n-en>RAD, rethought</h3>
         <p data-i18n-de>
           Rapid Application Development ist ein alter Hut — neuerdings
-          heißt das Gleiche „Low-Code" oder „KI-natives App-Building".
-          Wir bleiben beim ursprünglichen Begriff: Ein
-          <code>context</code> beschreibt Ihre Daten, ein
-          <code>screen</code> beschreibt die Oberfläche, onisin OS
-          erzeugt daraus automatisch GraphQL-Schema, UI und KI-Kontext.
+          heißt das Gleiche „Low-Code“ oder „KI-natives App-Building“.
+          Wir bleiben beim ursprünglichen Begriff: Eine
+          <code>.domain</code>-Datei beschreibt Ihre Daten, eine
+          <code>.view</code>-Datei beschreibt die Oberfläche — onisin OS
+          erzeugt daraus automatisch GraphQL-Schema, UI-Rendering und
+          den KI-Kontext für den Assistenten.
         </p>
         <p data-i18n-en>
           Rapid Application Development is a familiar idea —
-          recently rebranded as "low-code" or "AI-native app
-          building". We stick with the original name: a
-          <code>context</code> describes your data, a
-          <code>screen</code> describes the UI, and onisin OS
-          generates the GraphQL schema, the rendered UI and the
-          AI-facing schema automatically.
+          recently rebranded as &ldquo;low-code&rdquo; or &ldquo;AI-native app building&rdquo;.
+          We stick with the original name: a <code>.domain</code> file
+          describes your data, a <code>.view</code> file describes the UI —
+          onisin OS generates the GraphQL schema, UI rendering and the
+          AI-facing context automatically.
         </p>
       </div>
 
@@ -1187,6 +1191,142 @@
           </text>
         </g>
       </svg>
+    </div>
+  </div>
+</section>
+
+<!-- =============================== MODULES ============================== -->
+<section id="modules">
+  <div class="wrap">
+    <div class="eyebrow" data-i18n-de>Die Bausteine</div>
+    <div class="eyebrow" data-i18n-en>The building blocks</div>
+
+    <h2 data-i18n-de>Jedes Modul hat genau eine Aufgabe</h2>
+    <h2 data-i18n-en>Each module does exactly one thing</h2>
+
+    <p data-i18n-de>
+      onisin OS ist kein monolithisches Produkt. Es besteht aus wenigen,
+      klar abgegrenzten Modulen — jedes mit einer einzigen Verantwortung,
+      jedes über NATS miteinander verbunden.
+    </p>
+    <p data-i18n-en>
+      onisin OS is not a monolithic product. It is a set of clearly
+      bounded modules — each with a single responsibility, each
+      connected through NATS.
+    </p>
+
+    <div class="cards" style="grid-template-columns: repeat(3, 1fr);">
+
+      <div class="card">
+        <div class="badge" data-i18n-de>Anwendungs-Generator</div>
+        <div class="badge" data-i18n-en>Application generator</div>
+        <h3>oos</h3>
+        <p data-i18n-de>
+          Der Chat-Assistent, der Anwendungen erzeugt. Eine natürllichsprachliche
+          Anfrage — „Zeige alle Berliner Kunden über 50“ — wird automatisch
+          zu einer GraphQL-Abfrage, einem gerenderten Ergebnis-Board und einem
+          bearbeitbaren Formular. Kein Code, keine Konfiguration.
+        </p>
+        <p data-i18n-en>
+          The chat assistant that generates applications. A natural-language
+          request — “show all Berlin customers over 50” — automatically
+          becomes a GraphQL query, a rendered result board, and an editable
+          form. No code, no configuration.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="badge" data-i18n-de>Event-Analyse</div>
+        <div class="badge" data-i18n-en>Event analysis</div>
+        <h3 data-i18n-de>Event-System</h3>
+        <h3 data-i18n-en>Event system</h3>
+        <p data-i18n-de>
+          Ereignisdaten werden nicht nur gespeichert — sie werden sofort
+          eingebettet, kontextualisiert und für den KI-Assistenten zugänglich
+          gemacht. Strukturierte Grammatiken beschreiben was ein Ereignis
+          bedeutet. Das System macht Rohereignisse für Menschen lesbar
+          und für KI auffindbar.
+        </p>
+        <p data-i18n-en>
+          Events are not merely stored — they are immediately embedded,
+          contextualised, and made accessible to the AI assistant. Structured
+          grammars describe what an event means. The system makes raw events
+          readable for humans and retrievable for AI.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="badge" data-i18n-de>DSL-Designer</div>
+        <div class="badge" data-i18n-en>DSL designer</div>
+        <h3>oosd</h3>
+        <p data-i18n-de>
+          Der Desktop-Editor für Domains und Views. Schreibe eine
+          <code>.domain</code>-Datei, und oosd baut daraus sofort
+          GraphQL-Schema, KI-Kontext und UI-Vorschau. Ein
+          integrierter Chat-Assistent hilft beim Schreiben der DSL.
+        </p>
+        <p data-i18n-en>
+          The desktop editor for domains and views. Write a
+          <code>.domain</code> file and oosd immediately builds
+          the GraphQL schema, AI context, and UI preview. An
+          integrated chat assistant helps write the DSL.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="badge" data-i18n-de>Entwicklungswerkzeug</div>
+        <div class="badge" data-i18n-en>Development tool</div>
+        <h3>bench</h3>
+        <p data-i18n-de>
+          Eine Desktop-App die dem LLM Augen und Hände gibt: Dateisystem,
+          Shell, Git, PostgreSQL, Memory und Tasks — alles über NATS
+          erreichbar. Startet auf beliebig vielen Systemen gleichzeitig.
+          Live-Monitoring aller Tool-Calls und Logs aus dem gesamten Stack.
+        </p>
+        <p data-i18n-en>
+          A desktop app that gives the LLM eyes and hands: filesystem,
+          shell, Git, PostgreSQL, memory, and tasks — all reachable
+          via NATS. Runs on any number of systems simultaneously.
+          Live monitoring of all tool calls and logs from the entire stack.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="badge" data-i18n-de>KI-Backbone</div>
+        <div class="badge" data-i18n-en>AI backbone</div>
+        <h3>oosai</h3>
+        <p data-i18n-de>
+          Embedding-Service, RAG-Pipeline und semantische Suche in einem.
+          Reagiert auf Datenänderungen via PostgreSQL-Notify, baut
+          den Vektor-Index neu und antwortet auf NATS-Suchanfragen.
+          Das LLM bekommt Kontext — niemals Rohdaten.
+        </p>
+        <p data-i18n-en>
+          Embedding service, RAG pipeline, and semantic search in one.
+          Reacts to data changes via PostgreSQL notify, rebuilds the
+          vector index, and responds to NATS search requests. The LLM
+          receives context — never raw data.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="badge">In Entwicklung</div>
+        <h3 data-i18n-de>Document Search</h3>
+        <h3 data-i18n-en>Document search</h3>
+        <p data-i18n-de>
+          PDFs, Berichte, Protokolle — das gleiche Prinzip wie für
+          Datenbankdaten, aber für Dokumente. Ein neues DSL beschreibt
+          die Quelle, DuckDB indexiert die Metadaten, pgvector
+          hält die Embeddings. Datensouverän, lokal, ohne externe Dienste.
+        </p>
+        <p data-i18n-en>
+          PDFs, reports, protocols — the same principle as for database
+          data, but for documents. A new DSL describes the source,
+          DuckDB indexes the metadata, pgvector holds the embeddings.
+          Data-sovereign, local, no external services.
+        </p>
+      </div>
+
     </div>
   </div>
 </section>

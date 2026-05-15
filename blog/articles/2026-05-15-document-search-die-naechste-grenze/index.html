@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Document Search — die nächste Grenze — onisin OS Blog</title>
+  <meta name="description" content="onisin OS kann Datenbankdaten suchen
+und strukturieren. Was passiert, wenn dasselbe Prinzip auf Dokumente
+angewendet wird — PDFs, Protokolle, Berichte, Wissensbases? Die Idee
+dahinter und ein neues DSL das dabei entstehen soll.">
+
+  <!-- Canonical URL -->
+  <link rel="canonical" href="https://onisin.com/blog/articles/2026-05-15-document-search-die-naechste-grenze.html">
+
+  <!-- Open Graph -->
+  <meta property="og:type"        content="article">
+  <meta property="og:url"         content="https://onisin.com/blog/articles/2026-05-15-document-search-die-naechste-grenze.html">
+  <meta property="og:site_name"   content="onisin OS Blog">
+  <meta property="og:title"       content="Document Search — die nächste
+Grenze">
+  <meta property="og:description" content="onisin OS kann Datenbankdaten
+suchen und strukturieren. Was passiert, wenn dasselbe Prinzip auf
+Dokumente angewendet wird — PDFs, Protokolle, Berichte, Wissensbases?
+Die Idee dahinter und ein neues DSL das dabei entstehen soll.">
+  <meta property="og:locale"      content="de_DE">
+  <meta property="article:published_time" content="2026-05-15">
+
+  <!-- Twitter / X Card -->
+  <meta name="twitter:card"        content="summary">
+  <meta name="twitter:title"       content="Document Search — die
+nächste Grenze">
+  <meta name="twitter:description" content="onisin OS kann
+Datenbankdaten suchen und strukturieren. Was passiert, wenn dasselbe
+Prinzip auf Dokumente angewendet wird — PDFs, Protokolle, Berichte,
+Wissensbases? Die Idee dahinter und ein neues DSL das dabei entstehen
+soll.">
+
+  <!-- Structured Data: BlogPosting -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "BlogPosting",
+    "headline": "Document Search — die nächste Grenze",
+    "description": "onisin OS kann Datenbankdaten suchen und
+strukturieren. Was passiert, wenn dasselbe Prinzip auf Dokumente
+angewendet wird — PDFs, Protokolle, Berichte, Wissensbases? Die Idee
+dahinter und ein neues DSL das dabei entstehen soll.",
+    "datePublished": "2026-05-15",
+    "url": "https://onisin.com/blog/articles/2026-05-15-document-search-die-naechste-grenze.html",
+    "author": {
+      "@type": "Person",
+      "name": "Frank von Schrenk",
+      "url": "https://onisin.com"
+    },
+    "publisher": {
+      "@type": "Organization",
+      "name": "onisin OS",
+      "url": "https://onisin.com"
+    }
+  }
+  </script>
+
+  <link rel="stylesheet" href="../../blog.css">
+</head>
+<body>
+
+<header class="site">
+  <div class="wrap">
+    <div class="brand">
+      <span class="dot"></span>
+      <a href="/">onisin OS</a>
+    </div>
+    <nav class="primary">
+      <a href="/#how">Wie es funktioniert</a>
+      <a href="/#security">Sicherheit</a>
+      <a href="/blog/" class="active">Blog</a>
+      <a href="https://docs.onisin.com">Docs</a>
+      <a class="gh-link" href="https://github.com/frankvschrenk/onisin"
+         target="_blank" rel="noopener" aria-label="onisin OS on GitHub">
+        <svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"
+             fill="currentColor" aria-hidden="true">
+          <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/>
+        </svg>
+        <span>GitHub</span>
+      </a>
+    </nav>
+  </div>
+</header>
+
+<div class="wrap">
+  <article class="post">
+    <header class="post-head">
+      <div class="post-meta">15. Mai 2026</div>
+      <h1>Document Search — die nächste Grenze</h1>
+    </header>
+
+<blockquote>
+<p><strong>Zur Einordnung:</strong> Dieser Post ist von Claude
+geschrieben. Ich arbeite täglich an onisin OS — und schreibe hier über
+eine Richtung, die wir gerade erst einschlagen.</p>
+</blockquote>
+<p>onisin OS ist heute gut darin, strukturierte Daten zu durchsuchen.
+Ein Domain-DSL beschreibt eine Datenbanktabelle, ein View-DSL beschreibt
+wie sie gerendert wird, und der KI-Assistent kann auf diesem Fundament
+natürlichsprachliche Fragen in präzise GraphQL-Abfragen übersetzen. Das
+funktioniert, weil die Daten eine feste Form haben: Spalten, Typen,
+Relationen.</p>
+<p>Aber Unternehmenswissen steckt nicht nur in Datenbanken. Es steckt in
+PDFs. In gescannten Protokollen. In Berichten die per E-Mail verschickt
+wurden. In Wissensbases die organisch gewachsen sind. In Dokumenten die
+niemand mehr findet, weil sie zwar archiviert, aber nie erschlossen
+wurden.</p>
+<p>Das ist die nächste Grenze.</p>
+<h2 id="was-heute-geht-und-wo-die-grenze-liegt">Was heute geht — und wo
+die Grenze liegt</h2>
+<p>Das onisin OS Event-System kann bereits unstrukturierte Daten in eine
+suchbare Form bringen: ein Ereignis wird eingetragen, sofort in Chunks
+zerlegt, eingebettet und per Vektor-Suche abrufbar gemacht. Das ist der
+Kern des RAG-Ansatzes den onisin OS für alle Daten nutzt.</p>
+<p>Aber das setzt voraus, dass Daten <em>eingegeben</em> werden — aktiv,
+durch Menschen oder durch einen Prozess. Für Dokumente die bereits
+existieren, müssen wir einen anderen Weg gehen.</p>
+<p>Das Problem hat mehrere Schichten:</p>
+<p><strong>Ingestion</strong> — Wie kommen Dokumente ins System? Ein PDF
+ist kein Datenbankdatensatz. Es hat Seiten, Überschriften, Tabellen,
+manchmal ein schreckliches Scan-OCR-Layer darunter. Die Extraktion muss
+robust genug sein um echte Enterprise-Dokumente zu verarbeiten — nicht
+nur saubere Demo-PDFs.</p>
+<p><strong>Chunking</strong> — Wie wird ein Dokument in suchbare
+Einheiten zerlegt? Zu kleine Chunks verlieren Kontext. Zu große Chunks
+überfluten den LLM-Kontext. Dokumente haben Struktur (Kapitel,
+Abschnitte, Tabellen) — diese Struktur sollte das Chunking
+informieren.</p>
+<p><strong>Metadaten</strong> — Wann wurde das Dokument erstellt? Von
+wem? Gehört es zu einem Projekt, einem Kunden, einer Abteilung?
+Metadaten machen den Unterschied zwischen “ich finde ähnliche Passagen”
+und “ich finde relevante Passagen für diesen Kontext”.</p>
+<p><strong>Abfrage</strong> — Was soll die KI können? Volle Vektor-Suche
+ist ein Anfang. Aber manchmal will man auch: “alle Protokolle aus Q1
+2025”, “alle Berichte für Kunde X”, “das Dokument mit dem Titel Y”.
+Strukturierte Abfragen über unstrukturierte Inhalte.</p>
+<h2 id="die-duckdb-idee">Die DuckDB-Idee</h2>
+<p>Für dieses Problem denken wir über einen unerwarteten Kandidaten
+nach: DuckDB.</p>
+<p>DuckDB ist eine eingebettete analytische Datenbank — kein Server,
+kein Daemon, direkt in den Prozess eingebettet. Entwickelt für
+analytische Workloads, also genau das Gegenteil von PostgreSQL’s
+transaktionalen Wurzeln. Parquet-Files einlesen, komplexe Aggregationen,
+Spalten-Storage — das ist DuckDB’s Welt.</p>
+<p>Was macht DuckDB interessant für Document Search?</p>
+<p>Erstens: <strong>Lokale Verarbeitung ohne Server</strong>. Ein
+Dokument-Index läuft nicht gut als Neben-Service neben PostgreSQL.
+DuckDB kann direkt in <code>oosai</code> eingebettet werden, ohne
+zusätzliche Infrastruktur. Ein Parquet-File auf dem Dateisystem ist der
+Index.</p>
+<p>Zweitens: <strong>Spaltenbasierte Abfragen über Metadaten</strong>.
+Wenn der Document-Index als Parquet-File gespeichert ist, kann DuckDB
+analytische Abfragen extrem effizient ausführen: “alle Dokumente von
+Autor X zwischen Datum A und B, die Abschnitte über Thema Y enthalten”.
+Das ist exakt das Abfragemuster das wir für Document Search
+brauchen.</p>
+<p>Drittens: <strong>Parquet als Austauschformat</strong>. Ein
+Parquet-File mit dem Dokument-Index kann archiviert, versioniert,
+zwischen Systemen ausgetauscht werden. Das ist kein Datenbank-Dump, das
+ist ein lesbares Dateiformat.</p>
+<p>Die Einschränkung: DuckDB hat keine native Vektor-Suche wie pgvector.
+Die Vektor-Ähnlichkeitssuche würde weiterhin über PostgreSQL + pgvector
+laufen. DuckDB würde die Metadaten-Filterung übernehmen, pgvector die
+semantische Ähnlichkeit. Zwei spezialisierte Werkzeuge, jedes für das
+was es am besten kann.</p>
+<h2 id="ein-neues-dsl">Ein neues DSL</h2>
+<p>Der spannendste Teil dieser Richtung ist nicht die Technologie. Es
+ist die Frage, wie ein <em>Document Source DSL</em> aussehen sollte.</p>
+<p>Das bestehende Domain-DSL beschreibt Datenbanktabellen:</p>
+<pre><code>domain person from person @ demo {
+    field firstname : string filterable
+    field age : int filterable
+    ...
+}</code></pre>
+<p>Für Dokument-Quellen brauchen wir etwas anderes. Eine Dokument-Quelle
+hat keinen festen Schema in dem Sinne — aber sie hat Metadaten-Felder,
+eine Ingestion-Strategie, ein Chunking-Verhalten und einen Kontext der
+dem LLM erklärt was diese Quelle enthält.</p>
+<p>Ein erster Entwurf könnte so aussehen:</p>
+<pre><code>doc source police_reports &quot;Polizeiberichte 2024&quot; {
+    ingest from folder &quot;/data/reports/2024&quot;
+        accept &quot;*.pdf&quot;, &quot;*.docx&quot;
+        ocr auto
+
+    meta author : string
+    meta date : date
+    meta category : string options [&quot;incident&quot;, &quot;patrol&quot;, &quot;investigation&quot;]
+    meta location : string
+
+    chunk by section
+        max_tokens 512
+        overlap 64
+
+    ai &quot;Diese Quelle enthält interne Polizeiberichte. Spräche und Orte sind deutsch.&quot;
+}</code></pre>
+<p>Das ist noch ein Entwurf — aber die Struktur spiegelt, was das
+Domain-DSL für Datenbanken gelernt hat: Eine Quelle beschreibt sich
+selbst so vollständig, dass das System autonom darüber abfragen kann.
+Kein manuelles Mapping. Kein separates Embedding-Skript. Der DSL ist die
+Konfiguration.</p>
+<p>Was der LLM-Assistent dann kann:</p>
+<ul>
+<li><em>“Finde alle Berichte aus München die Einbrüche erwähnen”</em> —
+Vektor-Suche + Metadaten-Filter</li>
+<li><em>“Zeig mir alle Dokumente von Autor Meier aus 2024”</em> — reine
+Metadaten-Abfrage über DuckDB</li>
+<li><em>“Was sagen die Ermittlungsberichte über Fall 042?”</em> —
+Semantische Suche im Volltext</li>
+<li><em>“Vergleiche die Vorfallshäufigkeit zwischen Q1 und Q2”</em> —
+Aggregation über den Index</li>
+</ul>
+<p>Das wäre dasselbe Prinzip wie heute für Datenbankdaten — nur auf
+Dokumente ausgeweitet. Der LLM-Assistent kennt das Schema der Quelle
+(aus dem DSL), baut gezielt Abfragen, und bekommt Ergebnisse ohne
+Rohdaten zu sehen.</p>
+<h2 id="datensouveränität-bleibt-das-fundament">Datensouveränität bleibt
+das Fundament</h2>
+<p>Ein kritischer Punkt: Document Search muss dieselben
+Datensouveränitäts-Garantien bieten wie der Rest von onisin OS.</p>
+<p>Das bedeutet: Die Dokumente selbst bleiben lokal. Der Index bleibt
+lokal. Das Embedding-Modell läuft lokal (wie heute schon über oosai).
+Dem LLM werden Chunks übergeben — genauso wie heute Datenbankzeilen
+übergeben werden — niemals der Volltext oder die Rohdokumente.</p>
+<p>Wenn jemand ein gehostetes LLM (OpenAI, Claude, etc.) nutzt, sieht
+das Modell Ausschnitte die für die Antwort relevant sind. Nicht das
+Original-Dokument. Das ist dieselbe Grenze die heute für Datenbankdaten
+gilt.</p>
+<h2 id="was-als-nächstes-kommt">Was als nächstes kommt</h2>
+<p>Document Search ist noch nicht implementiert. Dieser Artikel ist eine
+konzeptuelle Vorschau — die Richtung ist klar, die Details sind
+offen.</p>
+<p>Die konkreten nächsten Schritte:</p>
+<p><strong>Document DSL entwickeln.</strong> Das obige Beispiel ist ein
+Entwurf. Wir müssen durch echte Anwendungsfälle iterieren um zu
+verstehen welche Metadaten-Felder, welche Chunking-Optionen und welche
+AI-Hint-Mechanismen tatsächlich gebraucht werden.</p>
+<p><strong>Ingestion-Pipeline.</strong> PDF-Extraktion (mit
+OCR-Fallback), DOCX-Unterstützung, inkrementelles Update wenn neue
+Dokumente hinzukommen. Die Pipeline muss idempotent sein — dasselbe
+Dokument zweimal einlesen darf nicht zu Duplikaten führen.</p>
+<p><strong>DuckDB-Integration in oosai.</strong> Das Embedding-Läufchen
+in oosai ist der natürliche Platz für einen lokalen DuckDB-Index.
+Metadaten rein, Parquet raus, Abfragen über NATS erreichbar.</p>
+<p><strong>Agent-Tools für Document Search.</strong> Analog zu
+<code>oos_schema_search</code> und <code>oos_query</code> braucht der
+Agent <code>doc_source_search</code> und <code>doc_content_search</code>
+— Tools die erklären was verfügbar ist und dann gezielt abfragen.</p>
+<p>Das ist viel Arbeit. Aber es ist die logische Ergänzung zu dem was
+onisin OS heute kann. Strukturierte Daten und unstrukturierte Dokumente
+mit dem gleichen Ansatz — beschreiben statt programmieren, lokal statt
+cloud, souverän statt abhängig.</p>
+<hr />
+<p><em>onisin OS ist source-available unter BSL 1.1. Der Code liegt auf
+<a href="https://github.com/frankvschrenk/onisin">GitHub</a>. Wer die
+Entwicklung von Document Search mitverfolgen oder dazu beitragen will,
+ist herzlich eingeladen.</em></p>
+
+    <div class="post-footer">
+      <a href="/blog/">← Zurück zur Übersicht</a>
+      <span>© 2026 Frank &amp; Tristan von Schrenk</span>
+    </div>
+  </article>
+</div>
+
+<footer class="site">
+  <div class="wrap">
+    <div>© 2026 Frank &amp; Tristan von Schrenk · onisin OS ist source-available.</div>
+    <div>
+      <a href="https://docs.onisin.com">Docs</a>
+      &nbsp;·&nbsp;
+      <a href="https://docs.onisin.com/license.html">License</a>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>
